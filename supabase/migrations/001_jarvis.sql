@@ -1,9 +1,17 @@
--- Jarvis integration. Run once in the Supabase SQL Editor (safe to re-run).
--- The app keeps working without it, but then Jarvis's actions aren't logged,
--- "Marked by Jarvis" isn't recorded and marking notes can't be saved.
+-- Jarvis integration delta.
+--
+-- WHO NEEDS THIS: databases created from schema.sql BEFORE the Jarvis integration
+-- (2 Oct 2026). A fresh project that ran the current schema.sql already has all of
+-- this, and running it again is a safe no-op.
+--
+-- Run in the Supabase SQL Editor. Safe to re-run. The app keeps working without
+-- it, but then Jarvis's actions aren't logged, "Marked by Jarvis" isn't recorded
+-- and marking notes can't be saved.
 
 -- Who saved the marks: 'admin' (you, on the website) or 'jarvis'.
 alter table grades add column if not exists marked_by text not null default 'admin';
+alter table grades drop constraint if exists grades_marked_by_check;
+alter table grades add constraint grades_marked_by_check check (marked_by in ('admin', 'jarvis'));
 
 -- Private notes Jarvis uses when marking (what a good answer / task looks like). Kids never see these.
 alter table homeworks add column if not exists marking_notes text not null default '';

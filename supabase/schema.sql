@@ -1,6 +1,8 @@
 -- Homework app database schema.
--- Run this once in the Supabase dashboard: SQL Editor -> New query -> paste -> Run.
--- It is safe to re-run: every statement uses "if not exists".
+-- Canonical schema for a FRESH project. Run this once in the Supabase dashboard:
+-- SQL Editor -> New query -> paste -> Run. It is safe to re-run ("if not exists"),
+-- but re-running it does not add new columns to tables that already exist: an
+-- older database is brought up to date with supabase/migrations/*.sql instead.
 --
 -- Security model: Row Level Security is switched ON for every table and no
 -- policies are added. That means the public "anon" key can read nothing; only
@@ -89,6 +91,7 @@ create table if not exists grades (
   comment       text,
   released_at   timestamptz,
   marked_by     text not null default 'admin'
+                constraint grades_marked_by_check check (marked_by in ('admin', 'jarvis'))
 );
 
 create table if not exists attendance (
