@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/spinner";
 import { useActionState } from "react";
 import { saveTaskInstructions, type FormState } from "@/app/actions/homework-admin";
 import { buttonClass, inputClass } from "@/components/ui";
@@ -20,7 +21,7 @@ export function TaskForm({ id, a, b, names }: { id: string; a: string; b: string
       </label>
       <div className="flex items-center gap-3">
         <button disabled={pending} className={buttonClass}>
-          {pending ? "Saving…" : "Save task"}
+          {pending ? (<><Spinner /> Saving…</>) : "Save task"}
         </button>
         {state.ok && <span className="text-sm text-emerald-700">{state.ok}</span>}
         {state.error && <span className="text-sm text-red-700">{state.error}</span>}

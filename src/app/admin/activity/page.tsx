@@ -60,12 +60,12 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
     return `/admin/activity${q.size ? `?${q}` : ""}`;
   };
   const chip = (active: boolean) =>
-    `shrink-0 rounded-full px-3 py-1 text-xs ring-1 ${active ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-slate-700 ring-slate-300"}`;
+    `shrink-0 rounded-full px-3 py-1 text-xs font-medium ring-1 transition active:scale-95 ${active ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md ring-transparent" : "bg-white text-slate-700 ring-slate-300 hover:-translate-y-0.5 hover:bg-indigo-50 hover:ring-indigo-300"}`;
 
   return (
     <>
       <TopBar name="Admin" home="/admin" badge="Teacher" links={ADMIN_LINKS} />
-      <main className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6">
+      <main className="stagger mx-auto w-full max-w-3xl space-y-4 px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-bold">Activity</h1>
           <div className="flex flex-wrap gap-2">

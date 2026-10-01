@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { saveAnswer } from "@/app/actions/student";
+import { Spinner } from "@/components/spinner";
 import { inputClass } from "@/components/ui";
 import type { StudentQuestion } from "@/lib/types";
 
@@ -90,7 +91,7 @@ export function Quiz({
         return (
           <fieldset
             key={q.id}
-            className="rounded-xl border border-slate-200 p-4"
+            className="rounded-2xl border border-slate-200 bg-white/60 p-4 transition focus-within:border-indigo-300 focus-within:shadow-md"
             onFocus={() => {
               focusStart.current[q.id] = Date.now();
             }}
@@ -120,24 +121,41 @@ export function Quiz({
 
             {q.type === "mcq" ? (
               <div className="space-y-2">
-                {q.options.map((option, oi) => (
-                  <label
-                    key={oi}
-                    className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 ${
-                      value.selected_option === oi ? "border-indigo-500 bg-indigo-50" : "border-slate-200"
-                    } ${locked ? "cursor-default opacity-80" : "hover:border-indigo-300"}`}
-                  >
-                    <input
-                      type="radio"
-                      name={`q-${q.id}`}
-                      checked={value.selected_option === oi}
-                      disabled={locked}
-                      onChange={() => update(q.id, { answer_text: null, selected_option: oi }, 0)}
-                      className="h-5 w-5 accent-indigo-600"
-                    />
-                    <span>{option}</span>
-                  </label>
-                ))}
+                {q.options.map((option, oi) => {
+                  const picked = value.selected_option === oi;
+                  return (
+                    <label
+                      key={oi}
+                      className={`group flex items-center gap-3 rounded-xl border-2 px-3 py-2.5 transition duration-150 ${
+                        picked ? "border-indigo-500 bg-indigo-50 shadow-md shadow-indigo-500/10" : "border-slate-200 bg-white"
+                      } ${
+                        locked
+                          ? "cursor-default opacity-80"
+                          : "cursor-pointer hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md active:scale-[0.98]"
+                      } has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-indigo-200`}
+                    >
+                      <input
+                        type="radio"
+                        name={`q-${q.id}`}
+                        checked={picked}
+                        disabled={locked}
+                        onChange={() => update(q.id, { answer_text: null, selected_option: oi }, 0)}
+                        className="sr-only"
+                      />
+                      <span
+                        key={picked ? "on" : "off"}
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold transition ${
+                          picked
+                            ? "animate-pop bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md"
+                            : "bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-700"
+                        }`}
+                      >
+                        {picked ? "✓" : String.fromCharCode(65 + oi)}
+                      </span>
+                      <span className={picked ? "font-semibold text-indigo-900" : ""}>{option}</span>
+                    </label>
+                  );
+                })}
               </div>
             ) : (
               <textarea
@@ -162,7 +180,21 @@ export function Quiz({
 
 function SaveNote({ state }: { state?: SaveState }) {
   if (!state || state === "idle") return null;
-  const text = { saving: "Saving…", saved: "Saved ✓", error: "Not saved — try again" }[state];
-  const color = state === "error" ? "text-red-600" : state === "saved" ? "text-emerald-600" : "text-slate-500";
-  return <p className={`mt-2 text-xs ${color}`}>{text}</p>;
+  if (state === "saving") {
+    return (
+      <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
+        <Spinner className="h-3 w-3" /> Saving…
+      </p>
+    );
+  }
+  return (
+    <p
+      key={state}
+      className={`mt-2 inline-flex animate-pop items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+        state === "saved" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+      }`}
+    >
+      {state === "saved" ? "Saved ✓" : "Not saved — try again"}
+    </p>
+  );
 }

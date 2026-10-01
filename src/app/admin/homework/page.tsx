@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Flash } from "@/components/flash";
 import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
-import { buttonClass, cardClass } from "@/components/ui";
+import { buttonClass, cardClass, linkCardClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
@@ -47,12 +47,12 @@ export default async function HomeworkListPage({ searchParams }: PageProps<"/adm
         {(homeworks ?? []).length === 0 ? (
           <p className={`${cardClass} text-sm text-slate-500`}>No homework yet. Click “New homework” to create the first one.</p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="stagger space-y-2">
             {(homeworks ?? []).map((h) => {
               const todo = missing(h);
               return (
                 <li key={h.id}>
-                  <Link href={`/admin/homework/${h.id}`} className={`block ${cardClass} hover:ring-indigo-300`}>
+                  <Link href={`/admin/homework/${h.id}`} className={linkCardClass}>
                     <div className="text-xs font-medium text-indigo-600">Week {h.week}</div>
                     <div className="font-semibold">{h.title}</div>
                     <div className="text-sm text-slate-500">Due {formatDateTime(h.due_at)}</div>

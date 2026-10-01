@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/spinner";
 import { useActionState } from "react";
 import { saveHomework, type FormState } from "@/app/actions/homework-admin";
 import { buttonClass, inputClass } from "@/components/ui";
@@ -48,7 +49,7 @@ export function HomeworkForm({ values }: { values: HomeworkFormValues }) {
       </div>
       <div className="flex items-center gap-3">
         <button disabled={pending} className={buttonClass}>
-          {pending ? "Saving…" : values.id ? "Save changes" : "Create homework"}
+          {pending ? (<><Spinner /> Saving…</>) : values.id ? "Save changes" : "Create homework"}
         </button>
         {state.ok && <span className="text-sm text-emerald-700">{state.ok}</span>}
         {state.error && <span className="text-sm text-red-700">{state.error}</span>}

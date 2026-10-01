@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitHomework } from "@/app/actions/student";
+import { Spinner } from "@/components/spinner";
+import { bigGoButtonClass } from "@/components/ui";
 import { daysLate, latePenalty } from "@/lib/rules";
 
 export function SubmitPanel({
@@ -43,12 +45,14 @@ export function SubmitPanel({
 
   return (
     <div className="space-y-2">
-      <button
-        onClick={handleSubmit}
-        disabled={pending}
-        className="w-full rounded-xl bg-emerald-600 px-4 py-3 text-lg font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
-      >
-        {pending ? "Handing in…" : "Hand in homework"}
+      <button onClick={handleSubmit} disabled={pending} className={bigGoButtonClass}>
+        {pending ? (
+          <>
+            <Spinner /> Handing in…
+          </>
+        ) : (
+          <>Hand in homework 🎯</>
+        )}
       </button>
       <p className="text-center text-xs text-slate-500">Your answers save as you go. Hand in once you&apos;ve finished everything.</p>
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

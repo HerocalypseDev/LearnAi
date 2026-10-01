@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/spinner";
 import { useActionState } from "react";
 import { saveAttendance, type AttendanceState } from "@/app/actions/attendance";
 import { buttonClass, inputClass } from "@/components/ui";
@@ -35,7 +36,7 @@ export function AttendanceForm({ date, label, rows }: { date: string; label: str
                   className="peer sr-only"
                 />
                 <span
-                  className={`inline-block rounded-lg px-3 py-1.5 text-sm ring-1 ring-slate-300 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-400 ${
+                  className={`inline-block cursor-pointer rounded-xl px-3 py-1.5 text-sm font-medium ring-1 ring-slate-300 transition hover:-translate-y-0.5 hover:shadow-md active:scale-95 peer-checked:shadow-md peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-400 ${
                     o.value === "yes" ? "peer-checked:bg-emerald-600" : "peer-checked:bg-red-600"
                   } peer-checked:text-white peer-checked:ring-transparent`}
                 >
@@ -49,7 +50,7 @@ export function AttendanceForm({ date, label, rows }: { date: string; label: str
       ))}
       <div className="flex items-center gap-3">
         <button disabled={pending} className={buttonClass}>
-          {pending ? "Saving…" : "Save"}
+          {pending ? (<><Spinner /> Saving…</>) : "Save"}
         </button>
         {state.ok && <span className="text-sm text-emerald-700">{state.ok}</span>}
         {state.error && <span className="text-sm text-red-700">{state.error}</span>}

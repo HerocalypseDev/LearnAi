@@ -19,7 +19,7 @@ export default async function AdminPage() {
   return (
     <>
       <TopBar name="Admin" home="/admin" badge="Teacher" links={ADMIN_LINKS} />
-      <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+      <main className="stagger mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
         <h1 className="text-2xl font-bold">Overview</h1>
 
         <section className="space-y-2">

@@ -3,7 +3,6 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { confirmUpload, removeUpload, requestUpload } from "@/app/actions/student";
-import { secondaryButtonClass } from "@/components/ui";
 import { checkUpload, MAX_FILES } from "@/lib/rules";
 
 export interface UploadView {
@@ -49,6 +48,7 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
   const [progress, setProgress] = useState<InProgress[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -96,6 +96,7 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
   }
 
   const busy = progress.length > 0;
+  const full = uploads.length >= MAX_FILES;
 
   return (
     <div className="space-y-3">
@@ -103,7 +104,7 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
 
       <ul className="space-y-2">
         {uploads.map((u) => (
-          <li key={u.id} className="flex items-center gap-3 rounded-xl border border-slate-200 p-2">
+          <li key={u.id} className="flex animate-pop items-center gap-3 rounded-xl border border-slate-200 bg-white p-2 transition hover:shadow-md">
             {isImage(u) && u.link ? (
               // eslint-disable-next-line @next/next/no-img-element -- short-lived signed link, not worth image optimisation
               <img src={u.link} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
@@ -125,7 +126,7 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
               <button
                 onClick={() => handleRemove(u.id)}
                 disabled={removing === u.id || busy}
-                className="rounded-lg px-2 py-1 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50"
+                className="rounded-lg px-2 py-1 text-sm font-medium text-red-700 transition hover:bg-red-50 active:scale-95 disabled:opacity-50"
               >
                 {removing === u.id ? "Removing…" : "Remove"}
               </button>
@@ -133,10 +134,10 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
           </li>
         ))}
         {progress.map((p) => (
-          <li key={p.name} className="rounded-xl border border-indigo-200 p-3">
+          <li key={p.name} className="animate-fade-up rounded-xl border border-indigo-200 bg-white p-3">
             <div className="mb-1 truncate text-sm">Uploading {p.name}…</div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full bg-indigo-500 transition-all" style={{ width: `${p.percent}%` }} />
+              <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all" style={{ width: `${p.percent}%` }} />
             </div>
           </li>
         ))}
@@ -159,13 +160,29 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
             className="hidden"
             id={`files-${homeworkId}`}
             onChange={(e) => void handleFiles(e.target.files)}
-            disabled={busy || uploads.length >= MAX_FILES}
+            disabled={busy || full}
           />
           <label
             htmlFor={`files-${homeworkId}`}
-            className={`${secondaryButtonClass} inline-block cursor-pointer ${busy || uploads.length >= MAX_FILES ? "pointer-events-none opacity-50" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!dragging) setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              if (!full && !busy) void handleFiles(e.dataTransfer.files);
+            }}
+            className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed px-4 py-6 text-center transition duration-200 ${
+              dragging
+                ? "scale-[1.02] border-indigo-500 bg-indigo-50 shadow-lg"
+                : "border-indigo-200 bg-indigo-50/40 hover:-translate-y-0.5 hover:border-indigo-400 hover:bg-indigo-50 hover:shadow-md"
+            } active:scale-[0.99] ${full || busy ? "pointer-events-none opacity-50" : ""}`}
           >
-            📎 Attach files
+            <span className={`text-3xl transition ${dragging ? "animate-wiggle" : ""}`}>{dragging ? "📥" : "📎"}</span>
+            <span className="font-semibold text-indigo-700">{dragging ? "Drop it here!" : "Tap to attach files"}</span>
+            <span className="hidden text-xs text-slate-500 sm:block">or drag them into this box</span>
           </label>
           <p className="mt-2 text-xs text-slate-500">
             Documents, pictures, PDFs, Scratch projects… up to 20MB each, {MAX_FILES} files max. Program files (.exe, .apk…) aren&apos;t

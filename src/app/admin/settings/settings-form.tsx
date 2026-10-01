@@ -1,5 +1,6 @@
 "use client";
 
+import { Spinner } from "@/components/spinner";
 import { useActionState } from "react";
 import { saveSettings, type PasswordState } from "@/app/actions/admin";
 import { buttonClass, inputClass } from "@/components/ui";
@@ -20,7 +21,7 @@ export function SettingsForm({ perDay, cap }: { perDay: number; cap: number }) {
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <button disabled={pending} className={buttonClass}>
-          {pending ? "Saving…" : "Save"}
+          {pending ? (<><Spinner /> Saving…</>) : "Save"}
         </button>
         {state.ok && <span className="text-sm text-emerald-700">{state.ok}</span>}
         {state.error && <span className="text-sm text-red-700">{state.error}</span>}

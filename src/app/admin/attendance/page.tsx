@@ -18,7 +18,7 @@ export default async function AttendancePage() {
   return (
     <>
       <TopBar name="Admin" home="/admin" badge="Teacher" links={ADMIN_LINKS} />
-      <main className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6">
+      <main className="stagger mx-auto w-full max-w-3xl space-y-4 px-4 py-6">
         <h1 className="text-2xl font-bold">Attendance</h1>
         <section className="grid gap-2 sm:grid-cols-2">
           {(students ?? []).map((s) => {

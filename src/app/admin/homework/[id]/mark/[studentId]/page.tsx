@@ -37,7 +37,7 @@ export default async function MarkPage({ params }: PageProps<"/admin/homework/[i
   return (
     <>
       <TopBar name="Admin" home="/admin" badge="Teacher" links={ADMIN_LINKS} />
-      <main className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
+      <main className="stagger mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
         <Link href={`/admin/homework/${homework.id}`} className="text-sm text-indigo-600 hover:underline">
           ← {homework.title}
         </Link>

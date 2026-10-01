@@ -26,6 +26,7 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 - CSV export of scores (with totals and badges), activity and attendance
 - Badges for the kids: Lift-off, On the clock, Never late, Quiz master, Superstar, Finisher
 - Settings: late penalty (points per day and cap) and passwords
+- Lively interface: gradient buttons that lift and press, spinners while saving, cards that slide in and lift on hover, letter-bubble quiz answers that pop, drag-and-drop uploads, count-up points, confetti on hand-in and release, and an animated login. Motion turns off for devices set to reduce motion.
 - Scores are hidden until the deadline has passed **and** the admin has released the marking. This is enforced on the server.
 
 ## One-time setup

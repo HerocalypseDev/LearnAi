@@ -1,8 +1,9 @@
 "use client";
 
+import { Spinner } from "@/components/spinner";
 import { useActionState, useState } from "react";
 import { deleteQuestion, saveQuestion, type FormState } from "@/app/actions/homework-admin";
-import { buttonClass, inputClass, secondaryButtonClass } from "@/components/ui";
+import { buttonClass, dangerButtonClass, inputClass } from "@/components/ui";
 import { PARTS } from "@/lib/rules";
 import type { QuizQuestion } from "@/lib/types";
 import type { VersionNames } from "./homework-form";
@@ -106,7 +107,7 @@ export function QuestionForm({
             </div>
           ))}
           {options.length < 6 && (
-            <button type="button" onClick={() => setOptions([...options, ""])} className="text-sm text-indigo-600">
+            <button type="button" onClick={() => setOptions([...options, ""])} className="rounded-lg px-2 py-1 text-sm font-medium text-indigo-600 transition hover:bg-indigo-50 active:scale-95">
               + Add option
             </button>
           )}
@@ -115,7 +116,7 @@ export function QuestionForm({
 
       <div className="flex flex-wrap items-center gap-3">
         <button disabled={pending} className={buttonClass}>
-          {pending ? "Saving…" : question.id ? "Save question" : "Add question"}
+          {pending ? (<><Spinner /> Saving…</>) : question.id ? "Save question" : "Add question"}
         </button>
         {question.id && (
           <button
@@ -125,7 +126,7 @@ export function QuestionForm({
             onClick={(e) => {
               if (!confirm("Delete this question? Any answers to it are deleted too.")) e.preventDefault();
             }}
-            className={`${secondaryButtonClass} text-red-700`}
+            className={dangerButtonClass}
           >
             Delete
           </button>

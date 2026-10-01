@@ -73,7 +73,7 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
   return (
     <>
       <TopBar name={student.full_name} home="/dashboard" />
-      <main className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
+      <main className="stagger mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
         <Link href="/dashboard" className="text-sm text-indigo-600 hover:underline">
           ← Back to dashboard
         </Link>
@@ -94,7 +94,7 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
         </section>
 
         {grade && (
-          <section className="rounded-2xl bg-emerald-50 p-5 ring-1 ring-emerald-200">
+          <section className="animate-pop rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 p-5 shadow-sm ring-1 ring-emerald-200">
             <h2 className="font-semibold text-emerald-900">Your result</h2>
             <p className="mt-1 text-3xl font-bold text-emerald-800">
               {grade.final_points} <span className="text-lg font-medium">/ {homework.max_points}</span>
@@ -151,7 +151,7 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
         </section>
 
         {locked ? (
-          <section className="rounded-2xl bg-emerald-50 p-5 text-center ring-1 ring-emerald-200">
+          <section className="animate-pop rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 p-5 text-center shadow-sm ring-1 ring-emerald-200">
             <p className="font-semibold text-emerald-800">✅ Handed in</p>
             <p className="mt-1 text-sm text-emerald-700">
               {grade ? "Your result is above." : "Your teacher will mark it after the deadline."}
@@ -178,7 +178,7 @@ function PartHeading({ part, title, points }: { part: number; title: string; poi
   return (
     <div className="mb-3 flex items-baseline justify-between gap-3">
       <h2 className="font-semibold">
-        <span className="mr-2 rounded-md bg-indigo-100 px-1.5 py-0.5 text-xs font-bold text-indigo-700">Part {part}</span>
+        <span className="mr-2 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-2 py-0.5 text-xs font-bold text-white shadow-sm">Part {part}</span>
         {title}
       </h2>
       <span className="shrink-0 text-sm text-slate-500">{points} points</span>

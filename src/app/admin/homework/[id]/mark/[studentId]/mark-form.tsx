@@ -2,7 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { saveMarks, type MarkState } from "@/app/actions/marking";
-import { buttonClass, inputClass, secondaryButtonClass } from "@/components/ui";
+import { Spinner } from "@/components/spinner";
+import { buttonClass, dangerButtonClass, inputClass, secondaryButtonClass } from "@/components/ui";
 
 const pointsInputClass =
   "w-20 rounded-lg border border-slate-300 bg-white px-3 py-2 text-base outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200";
@@ -206,7 +207,7 @@ export function MarkForm({
               <button name="intent" value="release" disabled={pending} className={buttonClass}>
                 Save &amp; keep released
               </button>
-              <button name="intent" value="unrelease" disabled={pending} className={`${secondaryButtonClass} text-red-700`}>
+              <button name="intent" value="unrelease" disabled={pending} className={dangerButtonClass}>
                 Hide from child
               </button>
             </>
@@ -215,7 +216,11 @@ export function MarkForm({
               Save &amp; release
             </button>
           )}
-          {pending && <span className="text-sm text-slate-500">Saving…</span>}
+          {pending && (
+            <span className="flex items-center gap-1.5 text-sm text-slate-500">
+              <Spinner /> Saving…
+            </span>
+          )}
         </div>
         <p className="text-xs text-slate-500">
           {released ? "Released. " : "Not released yet. "}

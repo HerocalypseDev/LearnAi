@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { SubmissionSummary } from "@/lib/marking";
 import { formatDateTime, isPast } from "@/lib/time";
+import { linkCardClass } from "./ui";
 
 /** One child's state for one homework, linking to the marking page. */
 export function SubmissionRow({ item, showHomework = false }: { item: SubmissionSummary; showHomework?: boolean }) {
@@ -23,7 +24,7 @@ export function SubmissionRow({ item, showHomework = false }: { item: Submission
   return (
     <Link
       href={`/admin/homework/${homework.id}/mark/${student.id}`}
-      className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 ring-1 ring-slate-200 hover:ring-indigo-300"
+      className={`${linkCardClass} flex items-center justify-between gap-3`}
     >
       <div className="min-w-0">
         <div className="font-medium">
@@ -34,7 +35,12 @@ export function SubmissionRow({ item, showHomework = false }: { item: Submission
           {submission?.submitted_at ? `Handed in ${formatDateTime(submission.submitted_at)}` : `Due ${formatDateTime(homework.due_at)}`}
         </div>
       </div>
-      <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${status.className}`}>{status.text}</span>
+      <span className="flex shrink-0 items-center gap-2">
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${status.className}`}>{status.text}</span>
+        <span className="text-indigo-400 transition group-hover:translate-x-1 group-hover:text-indigo-600" aria-hidden="true">
+          →
+        </span>
+      </span>
     </Link>
   );
 }

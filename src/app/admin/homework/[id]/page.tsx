@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deleteHomework } from "@/app/actions/homework-admin";
 import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
-import { buttonClass, cardClass, secondaryButtonClass } from "@/components/ui";
+import { buttonClass, cardClass, dangerButtonClass } from "@/components/ui";
 import { Flash } from "@/components/flash";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
@@ -41,7 +41,7 @@ export default async function EditHomeworkPage({ params, searchParams }: PagePro
   return (
     <>
       <TopBar name="Admin" home="/admin" badge="Teacher" links={ADMIN_LINKS} />
-      <main className="mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
+      <main className="stagger mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
         <div className="flex items-center justify-between gap-3">
           <Link href="/admin/homework" className="text-sm text-indigo-600 hover:underline">
             ← All homework
@@ -155,7 +155,7 @@ export default async function EditHomeworkPage({ params, searchParams }: PagePro
           <p className="mb-3 text-sm text-slate-500">Deletes the homework, its questions and every answer and grade for it.</p>
           <form action={deleteHomework}>
             <input type="hidden" name="id" value={homework.id} />
-            <ConfirmButton message={`Delete "${homework.title}" and everything submitted for it?`} className={`${secondaryButtonClass} text-red-700`}>
+            <ConfirmButton message={`Delete "${homework.title}" and everything submitted for it?`} className={dangerButtonClass}>
               Delete homework
             </ConfirmButton>
           </form>
