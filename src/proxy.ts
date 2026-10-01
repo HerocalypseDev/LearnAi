@@ -2,6 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { buildCsp, supabaseOrigin } from "@/lib/security-headers";
 import { SESSION_COOKIE, sessionSecretKey, verifySessionToken } from "@/lib/session-token";
 
+// Entry point: Next 16 replaced `middleware.ts` with `proxy.ts` that exports a function named `proxy`
+// (or a default export) plus `config.matcher`; see node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md.
+// `next build` lists it as "Proxy (Middleware)". Do not rename this file back to middleware.ts.
+//
 // Runs before every page request (not /api, not static files):
 //  1. a per-request CSP nonce, which Next.js applies to its own scripts;
 //  2. an optimistic sign-in check: no valid session cookie on a private page -> /login.

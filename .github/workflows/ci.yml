@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # `claude/**` covers the branch Vercel still deploys from until `main` is the default branch.
+    branches: [main, "claude/**"]
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
