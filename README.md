@@ -23,7 +23,7 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 
 1. Sign up at <https://supabase.com> and create a **New project**. Pick the region closest to Lagos (a Europe region is fine) and save the database password somewhere safe.
 2. Open **SQL Editor → New query**, paste all of `supabase/schema.sql`, then click **Run**.
-3. Open `supabase/seed.sql`, check the children's names, ages and A/B versions, paste it into a new query, then click **Run**.
+3. Paste all of `supabase/seed.sql` (James, version A, and Peter, version B) into a new query, then click **Run**.
 4. Go to **Project Settings → API Keys** and copy the **secret** key (it starts with `sb_secret_`). Then find the **Project URL** (`https://xxxx.supabase.co`) under **Project Settings → Data API**.
 
 ### 2. Vercel (website)

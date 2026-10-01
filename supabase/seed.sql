@@ -9,6 +9,6 @@
 
 insert into users (full_name, username, age, role, version) values
   ('Admin',               'admin',      null, 'admin',   null),
-  ('First Child Name',    'firstchild', 11,   'student', 'A'),
-  ('Second Child Name',   'secondchild', 12,  'student', 'B')
+  ('James',               'james',      11,   'student', 'A'),
+  ('Peter',               'peter',      12,   'student', 'B')
 on conflict (username) do nothing;
