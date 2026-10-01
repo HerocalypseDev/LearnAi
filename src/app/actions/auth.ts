@@ -48,13 +48,18 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   const since = new Date(Date.now() - LOCKOUT_MINUTES * 60_000).toISOString();
-  const { count } = await db()
+  const { count, error: lockError } = await db()
     .from("activity_log")
     .select("id", { count: "exact", head: true })
     .eq("user_id", user.id)
     .eq("event", "login_failed")
     .gte("created_at", since);
-  if ((count ?? 0) >= MAX_FAILED_ATTEMPTS) {
+  if (lockError || count === null) {
+    // Fail closed: if we can't tell whether this account is locked, don't let the attempt through.
+    console.error("login: lockout check failed", lockError?.message);
+    return fail(GENERIC_ERROR);
+  }
+  if (count >= MAX_FAILED_ATTEMPTS) {
     return fail(`Too many wrong tries. Wait ${LOCKOUT_MINUTES} minutes and try again.`);
   }
 

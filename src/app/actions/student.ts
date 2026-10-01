@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
-import { autoPoints, checkUpload, daysLate, MAX_FILE_BYTES } from "@/lib/rules";
+import { autoPoints, checkStoredUpload, checkUpload, daysLate, hasHandInContent, MAX_FILES } from "@/lib/rules";
 import { requireUser } from "@/lib/session";
 import { bucket, safeFileName, uploadFolder } from "@/lib/storage";
 import type { Homework, QuizQuestion, Submission, User } from "@/lib/types";
@@ -19,8 +19,22 @@ async function loadHomework(homeworkId: string): Promise<Homework | null> {
   return data;
 }
 
-/** The student's submission for a homework, created as a draft on first use. */
+/**
+ * The student's submission for a homework, created as a draft on first use.
+ *
+ * Race: the first open of a homework can arrive twice at once (two tabs, a double tap). The unique
+ * (homework_id, student_id) index guarantees one row; `ON CONFLICT DO NOTHING` makes the loser's insert a
+ * no-op that returns nothing (Postgres waits for the winner to commit first), and the loser then reads the
+ * winner's row. A plain "upsert and return" can't tell winner from loser, and only the winner may log quiz_start.
+ */
 async function getOrCreateSubmission(student: User, homeworkId: string): Promise<Submission> {
+  const find = () =>
+    db().from("submissions").select("*").eq("homework_id", homeworkId).eq("student_id", student.id).maybeSingle<Submission>();
+
+  const { data: existing, error: findError } = await find();
+  if (findError) throw new Error(findError.message);
+  if (existing) return existing;
+
   const { data: inserted, error } = await db()
     .from("submissions")
     .upsert({ homework_id: homeworkId, student_id: student.id }, { onConflict: "homework_id,student_id", ignoreDuplicates: true })
@@ -31,14 +45,9 @@ async function getOrCreateSubmission(student: User, homeworkId: string): Promise
     await logActivity(student.id, "quiz_start", { homework_id: homeworkId });
     return inserted[0];
   }
-  const { data, error: readError } = await db()
-    .from("submissions")
-    .select("*")
-    .eq("homework_id", homeworkId)
-    .eq("student_id", student.id)
-    .single<Submission>();
-  if (readError) throw new Error(readError.message);
-  return data;
+  const { data: winner, error: readError } = await find();
+  if (readError || !winner) throw new Error(readError?.message ?? "Could not open the homework. Try again.");
+  return winner;
 }
 
 const ALREADY_SUBMITTED = "This homework has already been handed in, so it can't be changed.";
@@ -70,6 +79,9 @@ export async function saveAnswer(input: {
   let answerText: string | null = null;
   let selected: number | null = null;
   if (question.type === "mcq") {
+    if (!Array.isArray(question.options) || question.options.length < 2) {
+      return { ok: false, error: "This question isn't ready yet. Tell your teacher." };
+    }
     const s = input.selectedOption;
     selected = typeof s === "number" && Number.isInteger(s) && s >= 0 && s < question.options.length ? s : null;
   } else {
@@ -152,39 +164,51 @@ export async function confirmUpload(input: {
     return { ok: false, error: ALREADY_SUBMITTED };
   }
 
-  // Trust the size Supabase stored, not what the browser said.
-  const { data: listed } = await bucket().list(folder, { search: objectName, limit: 10 });
-  const object = listed?.find((o) => o.name === objectName);
+  // Trust the size the storage service holds, not what the browser said. Its listing can lag a moment
+  // behind the upload, so look a few times; if the size is still unknown, ask the child to retry
+  // (the file stays in storage for that retry) instead of guessing.
+  let object: { name: string; metadata?: { size?: unknown } | null } | undefined;
+  let size: number | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: listed } = await bucket().list(folder, { search: objectName, limit: 10 });
+    object = listed?.find((o) => o.name === objectName);
+    const reported = object?.metadata?.size;
+    size = reported === undefined || reported === null ? null : Number(reported);
+    if (object && size !== null && Number.isFinite(size)) break;
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 300));
+  }
   if (!object) return { ok: false, error: "The upload didn't arrive. Try again." };
-  // metadata.size is normally present; if Supabase ever omits it, don't block the upload over it.
-  const reported = object.metadata?.size;
-  const size = reported === undefined || reported === null ? null : Number(reported);
 
   const { count } = await db()
     .from("uploads")
     .select("id", { count: "exact", head: true })
     .eq("submission_id", submission.id);
-  // Check both the name the browser reports and the name actually stored (they share the extension).
-  const checkedSize = size ?? 1;
-  const problem =
-    checkUpload(input.fileName, checkedSize, count ?? 0) ??
-    checkUpload(objectName, checkedSize, count ?? 0) ??
-    (size !== null && size > MAX_FILE_BYTES ? "File is bigger than 20MB." : null);
-  if (problem) {
-    await bucket().remove([input.path]);
-    return { ok: false, error: problem };
+  const verdict = checkStoredUpload(input.fileName, objectName, size, count ?? 0);
+  if (verdict) {
+    if (!verdict.retryable) await bucket().remove([input.path]);
+    return { ok: false, error: verdict.problem };
   }
+  const storedSize = size as number;
 
+  // The database is the hard gate: a trigger (supabase/migrations/002_integrity.sql) locks the submission,
+  // and refuses the row if it is handed in or already has MAX_FILES files, even for parallel requests.
   const { error } = await db().from("uploads").insert({
     submission_id: submission.id,
     file_name: input.fileName.slice(0, 200),
     file_type: input.fileType.slice(0, 100) || null,
-    size_bytes: size ?? 0,
+    size_bytes: storedSize,
     storage_path: input.path,
   });
-  if (error) return { ok: false, error: "Couldn't save the upload. Try again." };
+  if (error) {
+    if (error.code === "23505") return { ok: true }; // this exact file was already recorded (double confirm)
+    await bucket().remove([input.path]); // never leave a stored file that has no row
+    if (/already_submitted/.test(error.message)) return { ok: false, error: ALREADY_SUBMITTED };
+    if (/upload_limit/.test(error.message)) return { ok: false, error: `You can attach up to ${MAX_FILES} files.` };
+    console.error("confirmUpload insert failed", error.message);
+    return { ok: false, error: "Couldn't save the upload. Try again." };
+  }
 
-  await logActivity(student.id, "upload", { homework_id: homework.id, file_name: input.fileName, size_bytes: size });
+  await logActivity(student.id, "upload", { homework_id: homework.id, file_name: input.fileName, size_bytes: storedSize });
   revalidatePath(`/homework/${homework.id}`);
   return { ok: true };
 }
@@ -206,9 +230,12 @@ export async function removeUpload(uploadId: string): Promise<Result> {
   if (!upload || upload.submissions.student_id !== student.id) return { ok: false, error: "File not found." };
   if (upload.submissions.status === "submitted") return { ok: false, error: ALREADY_SUBMITTED };
 
-  await bucket().remove([upload.storage_path]);
+  // Row first: if the file can't be deleted from storage afterwards it is just an unreferenced leftover,
+  // whereas the other order could leave a listed file whose content is gone.
   const { error } = await db().from("uploads").delete().eq("id", upload.id);
   if (error) return { ok: false, error: "Couldn't remove the file. Try again." };
+  const { error: storageError } = await bucket().remove([upload.storage_path]);
+  if (storageError) console.error("removeUpload: storage delete failed", upload.storage_path, storageError.message);
 
   await logActivity(student.id, "upload", {
     homework_id: upload.submissions.homework_id,
@@ -226,6 +253,14 @@ export async function submitHomework(homeworkId: string): Promise<Result> {
 
   const submission = await getOrCreateSubmission(student, homework.id);
   if (submission.status === "submitted") return { ok: false, error: ALREADY_SUBMITTED };
+
+  const [{ data: answerRows }, { count: fileCount }] = await Promise.all([
+    db().from("answers").select("selected_option, answer_text").eq("submission_id", submission.id),
+    db().from("uploads").select("id", { count: "exact", head: true }).eq("submission_id", submission.id),
+  ]);
+  if (!hasHandInContent(answerRows ?? [], fileCount ?? 0)) {
+    return { ok: false, error: "Add your quiz answers or a file before handing in." };
+  }
 
   const now = new Date();
   const late = daysLate(new Date(homework.due_at), now);

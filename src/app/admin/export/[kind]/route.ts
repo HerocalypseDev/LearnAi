@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { csvFileName } from "@/lib/csv";
 import { buildCsv } from "@/lib/exports";
 import { getCurrentUser } from "@/lib/session";
 
@@ -12,7 +13,7 @@ export async function GET(_req: NextRequest, ctx: RouteContext<"/admin/export/[k
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${kind}"`,
+      "Content-Disposition": `attachment; filename="${csvFileName(kind)}"`,
       "Cache-Control": "no-store",
     },
   });

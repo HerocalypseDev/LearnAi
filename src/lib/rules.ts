@@ -81,6 +81,14 @@ export function checkStoredUpload(
   return problem ? { problem, retryable: false } : null;
 }
 
+/** A hand-in needs something in it: at least one real answer or one file. */
+export function hasHandInContent(
+  answers: { selected_option: number | null; answer_text: string | null }[],
+  fileCount: number,
+): boolean {
+  return fileCount > 0 || answers.some((a) => a.selected_option !== null || !!a.answer_text?.trim());
+}
+
 // ---- Quiz ----
 
 /** Multiple choice is auto-marked; short answers are marked by the admin (null until then). */
