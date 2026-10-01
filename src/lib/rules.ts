@@ -72,3 +72,22 @@ export function autoPoints(
   if (question.type !== "mcq") return null;
   return selectedOption !== null && selectedOption === question.correct_option ? question.points : 0;
 }
+
+// ---- Marking ----
+
+export function computeGrade(input: {
+  quizPoints: number;
+  taskPoints: number;
+  daysLate: number;
+  perDay?: number;
+  cap?: number;
+}) {
+  const penalty = latePenalty(input.daysLate, input.perDay, input.cap);
+  return { late_penalty: penalty, final_points: finalPoints(input.quizPoints, input.taskPoints, penalty) };
+}
+
+/** Clamp a typed mark to a whole number between 0 and max (blank counts as 0). */
+export function clampPoints(value: unknown, max: number): number {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) ? Math.min(Math.max(n, 0), max) : 0;
+}

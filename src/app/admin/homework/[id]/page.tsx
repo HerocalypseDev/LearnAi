@@ -9,6 +9,8 @@ import { versionNames } from "@/lib/student-data";
 import { toLagosInputs } from "@/lib/time";
 import type { Homework, QuizQuestion } from "@/lib/types";
 import { ConfirmButton } from "@/components/confirm-button";
+import { SubmissionRow } from "@/components/submission-row";
+import { loadSubmissionSummaries } from "@/lib/marking";
 import { HomeworkForm } from "../homework-form";
 import { QuestionForm } from "../question-form";
 
@@ -17,10 +19,11 @@ export default async function EditHomeworkPage({ params }: PageProps<"/admin/hom
   const { id } = await params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
-  const [{ data: homework }, { data: questions }, names] = await Promise.all([
+  const [{ data: homework }, { data: questions }, names, summaries] = await Promise.all([
     db().from("homeworks").select("*").eq("id", id).maybeSingle<Homework>(),
     db().from("quiz_questions").select("*").eq("homework_id", id).order("position").order("id").returns<QuizQuestion[]>(),
     versionNames(),
+    loadSubmissionSummaries(id),
   ]);
   if (!homework) notFound();
 
@@ -36,6 +39,13 @@ export default async function EditHomeworkPage({ params }: PageProps<"/admin/hom
         <Link href="/admin/homework" className="text-sm text-indigo-600 hover:underline">
           ← All homework
         </Link>
+
+        <section className="space-y-2">
+          <h2 className="text-lg font-bold">Students&apos; work</h2>
+          {summaries.map((item) => (
+            <SubmissionRow key={item.student.id} item={item} />
+          ))}
+        </section>
 
         <section className={cardClass}>
           <h1 className="mb-4 text-xl font-bold">{homework.title}</h1>

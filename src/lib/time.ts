@@ -45,3 +45,8 @@ export function fromLagosInputs(date: string, time: string): Date | null {
   const d = new Date(`${date}T${time}:00${LAGOS_OFFSET}`);
   return Number.isNaN(d.getTime()) ? null : d;
 }
+
+/** Whether a moment has passed (server components render once per request, so "now" is the request time). */
+export function isPast(iso: string | Date): boolean {
+  return new Date(iso).getTime() < Date.now();
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoPoints, checkUpload, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
+import { autoPoints, checkUpload, clampPoints, computeGrade, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
 import { fromLagosInputs, toLagosInputs } from "./time";
 
 // Wednesday 7 Oct 2026, 21:00 in Lagos (UTC+1) = 20:00 UTC.
@@ -112,5 +112,23 @@ describe("Lagos date inputs", () => {
   it("rejects junk", () => {
     expect(fromLagosInputs("", "21:00")).toBeNull();
     expect(fromLagosInputs("2026-13-45", "21:00")).toBeNull();
+  });
+});
+
+describe("computeGrade", () => {
+  it("applies the late penalty to quiz + task", () => {
+    expect(computeGrade({ quizPoints: 35, taskPoints: 50, daysLate: 0 })).toEqual({ late_penalty: 0, final_points: 85 });
+    expect(computeGrade({ quizPoints: 35, taskPoints: 50, daysLate: 1 })).toEqual({ late_penalty: 10, final_points: 75 });
+    expect(computeGrade({ quizPoints: 20, taskPoints: 20, daysLate: 7 })).toEqual({ late_penalty: 50, final_points: 0 });
+  });
+});
+
+describe("clampPoints", () => {
+  it("keeps marks inside 0..max", () => {
+    expect(clampPoints("45", 30)).toBe(30);
+    expect(clampPoints("-3", 30)).toBe(0);
+    expect(clampPoints("", 30)).toBe(0);
+    expect(clampPoints("12.6", 30)).toBe(13);
+    expect(clampPoints("abc", 30)).toBe(0);
   });
 });

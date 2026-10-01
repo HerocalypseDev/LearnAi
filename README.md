@@ -17,6 +17,7 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 - File uploads that go straight from the browser to private Supabase storage, with progress bars and previews for images and PDFs. Program files (.exe, .apk, .bat, .msi, .sh, .js and similar) are blocked, files are limited to 20MB each, and each homework takes at most 10 files.
 - One final "Hand in" that locks the work and records how many days late it is
 - Admin homework builder: title, week, due date and time (Lagos), A and B instructions, and quiz questions per version with a check that each version's quiz adds up to 40 points
+- Marking: each homework's admin page lists James's and Peter's status. The marking page shows their answers (multiple choice auto-marked, with time spent per question), their files with previews, points boxes for short answers and the task, the late penalty applied automatically, and a comment. **Save** keeps it hidden, **Save & release** shows it to the child once the deadline has passed. The Overview lists everything waiting to be marked.
 - Admin page with both students side by side, and setting each student's password and your own
 - Activity log of logins, failed logins, logouts, page views and feedback views, each with device and browser
 - Scores are hidden until the deadline has passed **and** the admin has released the marking. This is enforced on the server.

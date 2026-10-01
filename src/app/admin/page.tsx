@@ -1,4 +1,6 @@
+import { SubmissionRow } from "@/components/submission-row";
 import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
+import { loadSubmissionSummaries } from "@/lib/marking";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
@@ -14,12 +16,23 @@ export default async function AdminPage() {
     .order("full_name")
     .returns<User[]>();
   if (error) throw new Error(error.message);
+  const summaries = await loadSubmissionSummaries();
+  const toMark = summaries.filter((s) => s.submission?.status === "submitted" && !s.grade?.released_at);
 
   return (
     <>
       <TopBar name="Admin" home="/admin" badge="Teacher" links={ADMIN_LINKS} />
       <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
         <h1 className="text-2xl font-bold">Overview</h1>
+
+        <section className="space-y-2">
+          <h2 className="font-semibold">Waiting to be marked ({toMark.length})</h2>
+          {toMark.length === 0 ? (
+            <p className="rounded-xl bg-white p-3 text-sm text-slate-500 ring-1 ring-slate-200">Nothing to mark right now.</p>
+          ) : (
+            toMark.map((item) => <SubmissionRow key={`${item.homework.id}-${item.student.id}`} item={item} showHomework />)
+          )}
+        </section>
 
         <section className="grid gap-3 sm:grid-cols-2">
           {(students ?? []).map((s) => (
