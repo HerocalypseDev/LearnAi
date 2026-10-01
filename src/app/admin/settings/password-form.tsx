@@ -5,7 +5,7 @@ import { useActionState } from "react";
 import { buttonClass, inputClass } from "@/components/ui";
 import { setPassword, type PasswordState } from "@/app/actions/admin";
 
-export function PasswordForm({ userId, label }: { userId: string; label: string }) {
+export function PasswordForm({ userId, label, minLength = 6 }: { userId: string; label: string; minLength?: number }) {
   const [state, action, pending] = useActionState<PasswordState, FormData>(setPassword, {});
 
   return (
@@ -20,7 +20,7 @@ export function PasswordForm({ userId, label }: { userId: string; label: string 
           name="password"
           type="text"
           autoComplete="off"
-          minLength={6}
+          minLength={minLength}
           required
           placeholder="New password"
           className={`min-w-0 flex-1 ${inputClass}`}

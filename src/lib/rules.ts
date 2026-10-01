@@ -143,3 +143,16 @@ export function earnedBadges(items: BadgeInput[], now: Date): Badge[] {
   }
   return badges;
 }
+
+// ---- Passwords ----
+
+/** Kids type their password on a phone, so theirs can be short; the admin account controls everything. */
+export const MIN_PASSWORD_LENGTH = { student: 6, admin: 10 } as const;
+export const MAX_PASSWORD_LENGTH = 72; // bcrypt ignores anything after 72 bytes
+
+export function passwordProblem(password: string, role: "admin" | "student"): string | null {
+  const min = MIN_PASSWORD_LENGTH[role];
+  if (password.length < min) return `Use at least ${min} characters${role === "admin" ? " for the admin password" : ""}.`;
+  if (new TextEncoder().encode(password).length > MAX_PASSWORD_LENGTH) return `Use at most ${MAX_PASSWORD_LENGTH} characters.`;
+  return null;
+}

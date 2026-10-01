@@ -2,7 +2,7 @@ import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
 import { cardClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { MIN_TOKEN_LENGTH } from "@/lib/jarvis/auth";
-import { DEFAULT_PENALTY } from "@/lib/rules";
+import { DEFAULT_PENALTY, MIN_PASSWORD_LENGTH } from "@/lib/rules";
 import { requireUser } from "@/lib/session";
 import type { Settings, User } from "@/lib/types";
 import { PasswordForm } from "./password-form";
@@ -56,11 +56,11 @@ export default async function SettingsPage() {
           </div>
           {(students ?? []).map((s) => (
             <div key={s.id}>
-              <PasswordForm userId={s.id} label={`${s.full_name} (username: ${s.username})`} />
+              <PasswordForm userId={s.id} label={`${s.full_name} (username: ${s.username})`} minLength={MIN_PASSWORD_LENGTH.student} />
               {!s.password_hash && <p className="mt-1 text-xs font-semibold text-red-700">No password yet, so {s.full_name} can&apos;t log in.</p>}
             </div>
           ))}
-          <PasswordForm userId={admin.id} label="Your admin password" />
+          <PasswordForm userId={admin.id} label="Your admin password (at least 10 characters)" minLength={MIN_PASSWORD_LENGTH.admin} />
         </section>
       </main>
     </>

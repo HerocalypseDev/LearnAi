@@ -2,9 +2,9 @@ import "server-only";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { loadMarking } from "./marking";
-import { autoPoints, clampPoints, computeGrade, PARTS } from "./rules";
+import { autoPoints, clampPoints, computeGrade, PARTS, passwordProblem } from "./rules";
 import { fromLagosInputs, toLagosInputs } from "./time";
-import type { Homework, QuizQuestion, User } from "./types";
+import type { Homework, QuizQuestion, Role, User } from "./types";
 
 // Every admin change lives here, so the website (server actions) and Jarvis (the API in
 // app/api/jarvis) follow exactly the same rules. Callers check who is allowed first.
@@ -340,14 +340,13 @@ export async function updateSettings(perDayRaw: unknown, capRaw: unknown) {
   return { late_penalty_per_day: perDay, late_penalty_cap: cap };
 }
 
-export const MIN_PASSWORD_LENGTH = 6;
-
 export async function setUserPassword(userId: unknown, password: unknown) {
   const id = assertId(userId, "User");
   const pw = String(password ?? "");
-  if (pw.length < MIN_PASSWORD_LENGTH) throw new OpError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
   const { data: target } = await db().from("users").select("id, full_name, role").eq("id", id).maybeSingle();
   if (!target) throw new OpError("User not found.", 404);
+  const problem = passwordProblem(pw, target.role as Role);
+  if (problem) throw new OpError(problem);
   const passwordHash = await bcrypt.hash(pw, 12);
   const { error } = await db().from("users").update({ password_hash: passwordHash }).eq("id", id);
   if (error) throw new OpError("Could not save the password. Try again.", 500);
