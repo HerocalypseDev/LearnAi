@@ -26,14 +26,18 @@ export function SubmitPanel({
     const late = daysLate(new Date(dueAt), new Date());
     const lines = ["Hand in this homework? You can't change it afterwards."];
     if (unanswered > 0) lines.push(`\nYou haven't answered ${unanswered} question${unanswered === 1 ? "" : "s"}.`);
-    if (fileCount === 0) lines.push("\nYou haven't attached any files.");
+    if (fileCount === 0) lines.push("\nYou haven't uploaded your task file. The task is worth 60 points!");
     if (late > 0) lines.push(`\nIt's ${late} day${late === 1 ? "" : "s"} late: you'll lose ${latePenalty(late, penalty.perDay, penalty.cap)} points.`);
     if (!confirm(lines.join(""))) return;
 
     setPending(true);
     const result = await submitHomework(homeworkId);
+    if (result.ok) {
+      router.push("/dashboard?done=handed-in");
+      return;
+    }
     setPending(false);
-    if (!result.ok) setError(result.error);
+    setError(result.error);
     router.refresh();
   }
 

@@ -91,3 +91,55 @@ export function clampPoints(value: unknown, max: number): number {
   const n = Math.round(Number(value));
   return Number.isFinite(n) ? Math.min(Math.max(n, 0), max) : 0;
 }
+
+// ---- Homework structure ----
+
+/** Every homework: multiple choice 30 + short explanation 10 (= quiz 40), plus an uploaded task worth 60. */
+export const PARTS = { mcq: 30, short: 10, task: 60 } as const;
+
+export function quizTotals(questions: { type: "mcq" | "short"; points: number }[]) {
+  return {
+    mcq: questions.filter((q) => q.type === "mcq").reduce((s, q) => s + q.points, 0),
+    short: questions.filter((q) => q.type === "short").reduce((s, q) => s + q.points, 0),
+  };
+}
+
+// ---- Badges ----
+
+export interface BadgeInput {
+  dueAt: string;
+  submittedAt: string | null;
+  daysLate: number;
+  /** Only grades the child can already see. */
+  grade: { quiz_points: number; final_points: number } | null;
+  quizMax: number;
+}
+
+export interface Badge {
+  icon: string;
+  name: string;
+  description: string;
+}
+
+export function earnedBadges(items: BadgeInput[], now: Date): Badge[] {
+  const handedIn = items.filter((i) => i.submittedAt);
+  const onTime = handedIn.filter((i) => i.daysLate === 0);
+  const dueSoFar = items.filter((i) => new Date(i.dueAt).getTime() < now.getTime());
+  const badges: Badge[] = [];
+
+  if (handedIn.length >= 1) badges.push({ icon: "🚀", name: "Lift-off", description: "Handed in your first homework" });
+  if (onTime.length >= 3) badges.push({ icon: "⏰", name: "On the clock", description: "3 homeworks handed in on time" });
+  if (dueSoFar.length >= 2 && dueSoFar.every((i) => i.submittedAt && i.daysLate === 0)) {
+    badges.push({ icon: "🔥", name: "Never late", description: "Every homework so far handed in on time" });
+  }
+  if (items.some((i) => i.grade && i.grade.quiz_points >= i.quizMax)) {
+    badges.push({ icon: "🎯", name: "Quiz master", description: "Full marks on a quiz" });
+  }
+  if (items.some((i) => i.grade && i.grade.final_points >= 90)) {
+    badges.push({ icon: "🌟", name: "Superstar", description: "Scored 90 or more on a homework" });
+  }
+  if (items.length >= 8 && handedIn.length === items.length) {
+    badges.push({ icon: "🏆", name: "Finisher", description: "Handed in every homework of the course" });
+  }
+  return badges;
+}

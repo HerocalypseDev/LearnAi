@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoPoints, checkUpload, clampPoints, computeGrade, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
+import { autoPoints, checkUpload, clampPoints, computeGrade, earnedBadges, quizTotals, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
 import { fromLagosInputs, toLagosInputs } from "./time";
 
 // Wednesday 7 Oct 2026, 21:00 in Lagos (UTC+1) = 20:00 UTC.
@@ -130,5 +130,37 @@ describe("clampPoints", () => {
     expect(clampPoints("", 30)).toBe(0);
     expect(clampPoints("12.6", 30)).toBe(13);
     expect(clampPoints("abc", 30)).toBe(0);
+  });
+});
+
+describe("quizTotals", () => {
+  it("adds multiple choice and short answer points separately", () => {
+    expect(quizTotals([{ type: "mcq", points: 10 }, { type: "mcq", points: 20 }, { type: "short", points: 10 }])).toEqual({ mcq: 30, short: 10 });
+  });
+});
+
+describe("earnedBadges", () => {
+  const now = new Date("2026-10-20T12:00:00+01:00");
+  const item = (over: Partial<Parameters<typeof earnedBadges>[0][number]>) => ({
+    dueAt: "2026-10-07T21:00:00+01:00",
+    submittedAt: "2026-10-07T20:00:00+01:00",
+    daysLate: 0,
+    grade: null,
+    quizMax: 40,
+    ...over,
+  });
+  const names = (b: ReturnType<typeof earnedBadges>) => b.map((x) => x.name);
+
+  it("gives nothing before any hand-in", () => {
+    expect(earnedBadges([item({ submittedAt: null, dueAt: "2026-10-30T21:00:00+01:00" })], now)).toEqual([]);
+  });
+
+  it("rewards on-time streaks and good scores", () => {
+    const b = names(earnedBadges([item({}), item({}), item({ grade: { quiz_points: 40, final_points: 95 } })], now));
+    expect(b).toEqual(["Lift-off", "On the clock", "Never late", "Quiz master", "Superstar"]);
+  });
+
+  it("drops Never late after a late hand-in", () => {
+    expect(names(earnedBadges([item({}), item({ daysLate: 1 })], now))).not.toContain("Never late");
   });
 });

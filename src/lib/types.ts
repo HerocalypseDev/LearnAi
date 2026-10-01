@@ -96,3 +96,11 @@ export interface Upload {
   storage_path: string;
   uploaded_at: string;
 }
+
+export interface Attendance {
+  id: string;
+  student_id: string;
+  sunday_date: string;
+  present: boolean;
+  note: string | null;
+}

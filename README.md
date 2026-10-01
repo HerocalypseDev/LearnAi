@@ -3,7 +3,7 @@
 A private homework app for a 4-week AI class with one admin (the teacher) and two students.
 
 - **Next.js** (App Router, TypeScript), hosted free on **Vercel**
-- **Supabase** free tier: Postgres database (file storage comes in phase 2)
+- **Supabase** free tier: Postgres database and private file storage
 - Its own username + password login. Passwords are hashed with bcrypt and sessions are signed cookies.
 - All deadlines use Lagos time (WAT, UTC+1)
 
@@ -16,10 +16,16 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 - Quiz (multiple choice and short answer) that saves as the child types. Multiple choice is marked automatically, and correct answers never reach the browser.
 - File uploads that go straight from the browser to private Supabase storage, with progress bars and previews for images and PDFs. Program files (.exe, .apk, .bat, .msi, .sh, .js and similar) are blocked, files are limited to 20MB each, and each homework takes at most 10 files.
 - One final "Hand in" that locks the work and records how many days late it is
-- Admin homework builder: title, week, due date and time (Lagos), A and B instructions, and quiz questions per version with a check that each version's quiz adds up to 40 points
+- Every homework has three parts: **Part 1** multiple choice worth 30 (marked automatically), **Part 2** a short explanation worth 10 (you mark it), and **Part 3** the task worth 60, which is the file they upload
+- Admin homework builder: title, week, due date and time (Lagos), A and B instructions, and quiz questions per version, with a check that each version has 30 points of multiple choice and 10 of explanation
+- After an action you go back to the page above it: handing in goes to the dashboard; creating a homework goes to its page so you can add questions; **Done**, **Save changes**, marking and deleting go back to the list or the homework, with a green confirmation
 - Marking: each homework's admin page lists James's and Peter's status. The marking page shows their answers (multiple choice auto-marked, with time spent per question), their files with previews, points boxes for short answers and the task, the late penalty applied automatically, and a comment. **Save** keeps it hidden, **Save & release** shows it to the child once the deadline has passed. The Overview lists everything waiting to be marked.
-- Admin page with both students side by side, and setting each student's password and your own
-- Activity log of logins, failed logins, logouts, page views and feedback views, each with device and browser
+- Overview: both children side by side (points, average, on-time rate, missing work, attendance, last login, badges), with charts of score per homework and time spent on the quiz
+- Attendance: Present/Absent and a note per Sunday (dates in `src/lib/course.ts`)
+- Activity: every login, page, answer save (with time per question), upload, hand-in and result view, with device and browser, filterable by child and event
+- CSV export of scores (with totals and badges), activity and attendance
+- Badges for the kids: Lift-off, On the clock, Never late, Quiz master, Superstar, Finisher
+- Settings: late penalty (points per day and cap) and passwords
 - Scores are hidden until the deadline has passed **and** the admin has released the marking. This is enforced on the server.
 
 ## One-time setup

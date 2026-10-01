@@ -1,16 +1,19 @@
 import Link from "next/link";
 import { Countdown } from "@/components/countdown";
+import { Flash } from "@/components/flash";
 import { StatusPill } from "@/components/status-pill";
 import { TopBar } from "@/components/top-bar";
 import { logActivity } from "@/lib/activity";
 import { requireUser } from "@/lib/session";
 import { loadStudentHomework, type StudentHomework } from "@/lib/student-data";
+import { earnedBadges } from "@/lib/rules";
 import { formatDateTime } from "@/lib/time";
 
 const WEEKS = [1, 2, 3, 4];
 
-export default async function DashboardPage() {
+export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const student = await requireUser("student");
+  const { done: doneParam } = await searchParams;
   const [items] = await Promise.all([
     loadStudentHomework(student.id),
     logActivity(student.id, "page_view", { page: "dashboard" }),
@@ -21,11 +24,22 @@ export default async function DashboardPage() {
   const done = items.filter((i) => i.status === "submitted" || i.status === "late").reverse();
   const points = items.reduce((sum, i) => sum + (i.grade?.final_points ?? 0), 0);
   const firstName = student.full_name.split(" ")[0];
+  const badges = earnedBadges(
+    items.map((i) => ({
+      dueAt: i.homework.due_at,
+      submittedAt: i.submission?.status === "submitted" ? i.submission.submitted_at : null,
+      daysLate: i.submission?.days_late ?? 0,
+      grade: i.grade,
+      quizMax: i.homework.quiz_points,
+    })),
+    new Date(),
+  );
 
   return (
     <>
       <TopBar name={student.full_name} home="/dashboard" />
       <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+        <Flash done={doneParam} />
         <section>
           <h1 className="text-2xl font-bold">Hi {firstName} 👋</h1>
           <p className="text-slate-500">Homework is due at 9:00pm on Wednesdays and Saturdays.</p>
@@ -37,6 +51,25 @@ export default async function DashboardPage() {
         </section>
 
         <CourseProgress items={items} />
+
+        <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+          <h2 className="mb-2 font-semibold">Badges</h2>
+          {badges.length === 0 ? (
+            <p className="text-sm text-slate-500">Hand in your first homework to earn your first badge! 🚀</p>
+          ) : (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {badges.map((b) => (
+                <li key={b.name} className="flex items-center gap-3 rounded-xl bg-amber-50 p-2 ring-1 ring-amber-200">
+                  <span className="text-2xl">{b.icon}</span>
+                  <span>
+                    <span className="block text-sm font-semibold">{b.name}</span>
+                    <span className="block text-xs text-slate-600">{b.description}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
         <HomeworkList title="Due next" empty="Nothing due right now. 🎉" items={toDo} countdown />
         {overdue.length > 0 && (

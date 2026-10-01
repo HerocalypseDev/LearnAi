@@ -21,6 +21,7 @@ export function QuestionForm({
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(saveQuestion, {});
   const [type, setType] = useState(question.type);
+  const [points, setPoints] = useState(String(question.points));
   const [options, setOptions] = useState<string[]>(question.options.length ? question.options : ["", "", "", ""]);
   const [correct, setCorrect] = useState<number>(question.correct_option ?? 0);
   const [prompt, setPrompt] = useState(question.prompt);
@@ -37,11 +38,16 @@ export function QuestionForm({
           <select
             name="type"
             value={type}
-            onChange={(e) => setType(e.target.value as Draft["type"])}
+            onChange={(e) => {
+              const next = e.target.value as Draft["type"];
+              setType(next);
+              // New questions: suggest the usual value for the explanation question.
+              if (!question.id) setPoints(next === "short" ? "10" : String(question.points));
+            }}
             className={`mt-1 ${inputClass}`}
           >
             <option value="mcq">Multiple choice</option>
-            <option value="short">Short answer</option>
+            <option value="short">Short explanation</option>
           </select>
         </label>
         <label className="col-span-2 block sm:col-span-1">
@@ -59,7 +65,8 @@ export function QuestionForm({
             type="number"
             min={0}
             max={40}
-            defaultValue={question.points}
+            value={points}
+            onChange={(e) => setPoints(e.target.value)}
             required
             className={`mt-1 ${inputClass}`}
           />

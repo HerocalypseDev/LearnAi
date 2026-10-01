@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { loadMarking } from "@/lib/marking";
 import { autoPoints, clampPoints, computeGrade } from "@/lib/rules";
@@ -73,6 +74,6 @@ export async function saveMarks(_prev: MarkState, formData: FormData): Promise<M
 
   revalidatePath(`/admin/homework/${homeworkId}`);
   revalidatePath("/admin");
-  const verdict = intent === "release" ? "Saved and released." : intent === "unrelease" ? "Hidden from the child again." : "Saved (not released).";
-  return { ok: `${verdict} Final score ${final_points}/${homework.max_points}.` };
+  const done = intent === "release" ? "released" : intent === "unrelease" ? "hidden" : "marks-saved";
+  redirect(`/admin/homework/${homeworkId}?done=${done}`);
 }

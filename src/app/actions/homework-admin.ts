@@ -37,13 +37,13 @@ export async function saveHomework(_prev: FormState, formData: FormData): Promis
     if (error) return { error: error.message };
     revalidatePath("/admin/homework");
     revalidatePath(`/admin/homework/${id}`);
-    return { ok: "Saved." };
+    redirect("/admin/homework?done=saved");
   }
 
   const { data, error } = await db().from("homeworks").insert(row).select("id").single();
   if (error) return { error: error.message };
   revalidatePath("/admin/homework");
-  redirect(`/admin/homework/${data.id}`);
+  redirect(`/admin/homework/${data.id}?done=created`);
 }
 
 export async function deleteHomework(formData: FormData) {
@@ -52,7 +52,7 @@ export async function deleteHomework(formData: FormData) {
   const { error } = await db().from("homeworks").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/homework");
-  redirect("/admin/homework");
+  redirect("/admin/homework?done=deleted");
 }
 
 export async function saveQuestion(_prev: FormState, formData: FormData): Promise<FormState> {

@@ -6,7 +6,7 @@ import { TopBar } from "@/components/top-bar";
 import { logActivity } from "@/lib/activity";
 import { requireUser } from "@/lib/session";
 import { db } from "@/lib/db";
-import { DEFAULT_PENALTY } from "@/lib/rules";
+import { DEFAULT_PENALTY, PARTS } from "@/lib/rules";
 import { signedLinks } from "@/lib/storage";
 import { loadStudentHomework } from "@/lib/student-data";
 import { formatDateTime } from "@/lib/time";
@@ -45,6 +45,8 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
   ]);
 
   const quiz = questions ?? [];
+  const mcq = quiz.filter((q) => q.type === "mcq");
+  const short = quiz.filter((q) => q.type === "short");
   const links = await signedLinks((uploads ?? []).map((u) => u.storage_path));
   const uploadViews: UploadView[] = (uploads ?? []).map((u) => ({
     id: u.id,
@@ -132,15 +134,23 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
           )}
         </section>
 
-        {quiz.length > 0 && (
+        {mcq.length > 0 && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <h2 className="mb-3 font-semibold">Quiz</h2>
-            <Quiz homeworkId={id} questions={quiz} initial={saved} locked={locked} earned={grade ? earned : undefined} />
+            <PartHeading part={1} title="Multiple choice" points={PARTS.mcq} />
+            <Quiz homeworkId={id} questions={mcq} initial={saved} locked={locked} earned={grade ? earned : undefined} />
+          </section>
+        )}
+
+        {short.length > 0 && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <PartHeading part={2} title="Explain it" points={PARTS.short} />
+            <Quiz homeworkId={id} questions={short} initial={saved} locked={locked} earned={grade ? earned : undefined} />
           </section>
         )}
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <h2 className="mb-3 font-semibold">Your files</h2>
+          <PartHeading part={3} title="Task — upload your work" points={PARTS.task} />
+          <p className="mb-3 text-sm text-slate-600">Do the task in the instructions above, then attach your file here.</p>
           <Uploads homeworkId={id} uploads={uploadViews} locked={locked} />
         </section>
 
@@ -165,5 +175,17 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
         )}
       </main>
     </>
+  );
+}
+
+function PartHeading({ part, title, points }: { part: number; title: string; points: number }) {
+  return (
+    <div className="mb-3 flex items-baseline justify-between gap-3">
+      <h2 className="font-semibold">
+        <span className="mr-2 rounded-md bg-indigo-100 px-1.5 py-0.5 text-xs font-bold text-indigo-700">Part {part}</span>
+        {title}
+      </h2>
+      <span className="shrink-0 text-sm text-slate-500">{points} points</span>
+    </div>
   );
 }

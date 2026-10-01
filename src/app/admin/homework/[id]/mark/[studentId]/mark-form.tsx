@@ -68,76 +68,91 @@ export function MarkForm({
       <input type="hidden" name="student_id" value={studentId} />
 
       <section className="space-y-3">
-        <h2 className="text-lg font-bold">Quiz</h2>
         {questions.length === 0 && <p className="text-sm text-slate-500">No quiz questions for this version.</p>}
-        {questions.map((q, i) => (
-          <div key={q.id} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-            <div className="mb-2 flex items-start justify-between gap-3">
-              <p className="font-medium">
-                <span className="mr-1 text-indigo-600">{i + 1}.</span>
-                <span className="whitespace-pre-wrap">{q.prompt}</span>
-              </p>
-              <span className="shrink-0 text-xs text-slate-500">
-                {q.seconds !== null && `${Math.max(1, Math.round(q.seconds / 60))} min · `}
-                {q.points} pts
-              </span>
+        {(["mcq", "short"] as const).map((type) => {
+          const group = questions.filter((q) => q.type === type);
+          if (group.length === 0) return null;
+          const subtotal = group.reduce((sum, q) => sum + (type === "mcq" ? (q.earned ?? 0) : clampPoints(manual[q.id], q.points)), 0);
+          const max = group.reduce((sum, q) => sum + q.points, 0);
+          return (
+            <div key={type} className="space-y-3">
+              <h2 className="flex items-baseline justify-between text-lg font-bold">
+                {type === "mcq" ? "Part 1 · Multiple choice" : "Part 2 · Explanation"}
+                <span className="text-sm font-semibold text-slate-600">
+                  {subtotal}/{max}
+                </span>
+              </h2>
+              {group.map((q, i) => (
+                <div key={q.id} className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <p className="font-medium">
+                      <span className="mr-1 text-indigo-600">{i + 1}.</span>
+                      <span className="whitespace-pre-wrap">{q.prompt}</span>
+                    </p>
+                    <span className="shrink-0 text-xs text-slate-500">
+                      {q.seconds !== null && `${Math.max(1, Math.round(q.seconds / 60))} min · `}
+                      {q.points} pts
+                    </span>
+                  </div>
+                  {q.type === "mcq" ? (
+                    <>
+                      <ul className="space-y-1 text-sm">
+                        {q.options.map((o, oi) => {
+                          const chosen = q.selected_option === oi;
+                          const correct = q.correct_option === oi;
+                          return (
+                            <li
+                              key={oi}
+                              className={`rounded-lg px-3 py-1.5 ${
+                                chosen && correct
+                                  ? "bg-emerald-100 font-semibold text-emerald-900"
+                                  : chosen
+                                    ? "bg-red-100 font-semibold text-red-900"
+                                    : correct
+                                      ? "bg-emerald-50 text-emerald-800"
+                                      : "text-slate-600"
+                              }`}
+                            >
+                              {chosen ? "➜ " : ""}
+                              {o}
+                              {correct && " ✓"}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <p className="mt-2 text-sm font-semibold">
+                        {q.selected_option === null ? "Not answered · " : ""}Auto-marked: {q.earned ?? 0}/{q.points}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm">
+                        {q.answer_text?.trim() || <span className="text-slate-400">No answer</span>}
+                      </p>
+                      <label className="mt-2 flex items-center gap-2 text-sm font-medium">
+                        Points
+                        <input
+                          name={`q_${q.id}`}
+                          type="number"
+                          min={0}
+                          max={q.points}
+                          value={manual[q.id] ?? ""}
+                          onChange={(e) => setManual({ ...manual, [q.id]: e.target.value })}
+                          className={pointsInputClass}
+                        />
+                        <span className="text-slate-500">/ {q.points}</span>
+                      </label>
+                    </>
+                  )}
+                </div>
+              ))}
             </div>
-            {q.type === "mcq" ? (
-              <>
-                <ul className="space-y-1 text-sm">
-                  {q.options.map((o, oi) => {
-                    const chosen = q.selected_option === oi;
-                    const correct = q.correct_option === oi;
-                    return (
-                      <li
-                        key={oi}
-                        className={`rounded-lg px-3 py-1.5 ${
-                          chosen && correct
-                            ? "bg-emerald-100 font-semibold text-emerald-900"
-                            : chosen
-                              ? "bg-red-100 font-semibold text-red-900"
-                              : correct
-                                ? "bg-emerald-50 text-emerald-800"
-                                : "text-slate-600"
-                        }`}
-                      >
-                        {chosen ? "➜ " : ""}
-                        {o}
-                        {correct && " ✓"}
-                      </li>
-                    );
-                  })}
-                </ul>
-                <p className="mt-2 text-sm font-semibold">
-                  {q.selected_option === null ? "Not answered · " : ""}Auto-marked: {q.earned ?? 0}/{q.points}
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm">
-                  {q.answer_text?.trim() || <span className="text-slate-400">No answer</span>}
-                </p>
-                <label className="mt-2 flex items-center gap-2 text-sm font-medium">
-                  Points
-                  <input
-                    name={`q_${q.id}`}
-                    type="number"
-                    min={0}
-                    max={q.points}
-                    value={manual[q.id] ?? ""}
-                    onChange={(e) => setManual({ ...manual, [q.id]: e.target.value })}
-                    className={pointsInputClass}
-                  />
-                  <span className="text-slate-500">/ {q.points}</span>
-                </label>
-              </>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </section>
 
       <section className="space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <h2 className="text-lg font-bold">Task &amp; comment</h2>
+        <h2 className="text-lg font-bold">Part 3 · Task (uploaded file) &amp; comment</h2>
         <label className="flex items-center gap-2 text-sm font-medium">
           Task points
           <input
