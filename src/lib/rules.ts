@@ -48,9 +48,11 @@ export const BLOCKED_EXTENSIONS = [
   "cmd", "com", "scr", "ps1", "vbs", "jar", "dll", "app", "dmg", "deb", "rpm", "msix", "appx", "ipa",
 ];
 
+/** Extension without trailing dots/spaces, which Windows ignores ("setup.exe." and "setup.exe " are setup.exe). */
 export function fileExtension(name: string): string {
-  const dot = name.lastIndexOf(".");
-  return dot === -1 ? "" : name.slice(dot + 1).toLowerCase();
+  const trimmed = name.replace(/[.\s]+$/, "");
+  const dot = trimmed.lastIndexOf(".");
+  return dot === -1 ? "" : trimmed.slice(dot + 1).toLowerCase();
 }
 
 /** Returns a child-friendly error, or null if the file is allowed. */
@@ -62,6 +64,23 @@ export function checkUpload(name: string, sizeBytes: number, filesAlready: numbe
   return null;
 }
 
+/**
+ * Final check when an upload is confirmed. `size` is what the storage service actually holds (null = unknown).
+ * Both the name the browser reported and the name the object was stored under must be allowed.
+ */
+export function checkStoredUpload(
+  reportedName: string,
+  storedName: string,
+  size: number | null,
+  filesAlready: number,
+): { problem: string; retryable: boolean } | null {
+  if (size === null || !Number.isFinite(size)) {
+    return { problem: "We couldn't check that file yet. Wait a moment and try again.", retryable: true };
+  }
+  const problem = checkUpload(reportedName, size, filesAlready) ?? checkUpload(storedName, size, filesAlready);
+  return problem ? { problem, retryable: false } : null;
+}
+
 // ---- Quiz ----
 
 /** Multiple choice is auto-marked; short answers are marked by the admin (null until then). */
@@ -71,6 +90,22 @@ export function autoPoints(
 ): number | null {
   if (question.type !== "mcq") return null;
   return selectedOption !== null && selectedOption === question.correct_option ? question.points : 0;
+}
+
+/** Quiz total from the questions as they are NOW (never from stored auto_points), capped at the quiz maximum. */
+export function quizScore(
+  questions: { id: string; type: "mcq" | "short"; correct_option: number | null; points: number }[],
+  picks: Record<string, { selected_option: number | null; manual_points: number | null } | undefined>,
+  quizMax: number = PARTS.mcq + PARTS.short,
+) {
+  let mcq = 0;
+  let short = 0;
+  for (const q of questions) {
+    const pick = picks[q.id];
+    if (q.type === "mcq") mcq += autoPoints(q, pick?.selected_option ?? null) ?? 0;
+    else short += pick?.manual_points ?? 0;
+  }
+  return { mcq, short, total: Math.min(mcq + short, quizMax) };
 }
 
 // ---- Marking ----
@@ -154,5 +189,52 @@ export function passwordProblem(password: string, role: "admin" | "student"): st
   const min = MIN_PASSWORD_LENGTH[role];
   if (password.length < min) return `Use at least ${min} characters${role === "admin" ? " for the admin password" : ""}.`;
   if (new TextEncoder().encode(password).length > MAX_PASSWORD_LENGTH) return `Use at most ${MAX_PASSWORD_LENGTH} characters.`;
+  return null;
+}
+
+// ---- Question validation ----
+
+/** Drop blank options and re-point the correct answer at the remaining list. */
+export function normalizeMcq(
+  rawOptions: unknown[],
+  correctRaw: unknown,
+): { options: string[]; correct: number } | { error: string } {
+  const picked = correctRaw === null || correctRaw === undefined || correctRaw === "" ? NaN : Number(correctRaw);
+  const options: string[] = [];
+  let correct: number | null = null;
+  rawOptions.forEach((o, i) => {
+    const text = String(o ?? "").trim();
+    if (!text) return;
+    if (i === picked) correct = options.length;
+    options.push(text.slice(0, 300));
+  });
+  if (options.length < 2) return { error: "Multiple choice needs at least 2 options." };
+  if (options.length > 6) return { error: "Multiple choice can have at most 6 options." };
+  if (correct === null) return { error: "Say which option is correct (correct_option, counting from 0)." };
+  return { options, correct };
+}
+
+/**
+ * Would adding/changing this question push a version over its budget? `others` are the homework's other
+ * questions (leave out the one being edited). Multiple choice: at most PARTS.mcq per version.
+ * Short answer: at most PARTS.short per version (one question, since each is worth PARTS.short).
+ */
+export function checkQuestionBudget(
+  others: { version: "A" | "B" | "both"; type: "mcq" | "short"; points: number }[],
+  candidate: { version: "A" | "B" | "both"; type: "mcq" | "short"; points: number },
+): string | null {
+  const versions: ("A" | "B")[] = candidate.version === "both" ? ["A", "B"] : [candidate.version];
+  for (const v of versions) {
+    const mine = others.filter((q) => q.version === v || q.version === "both");
+    const totals = quizTotals(mine);
+    if (candidate.type === "mcq" && totals.mcq + candidate.points > PARTS.mcq) {
+      return `Multiple choice for version ${v} would be ${totals.mcq + candidate.points} points, but it is ${PARTS.mcq} in total. ${
+        PARTS.mcq - totals.mcq > 0 ? `Only ${PARTS.mcq - totals.mcq} left.` : "It is already full."
+      }`;
+    }
+    if (candidate.type === "short" && totals.short + candidate.points > PARTS.short) {
+      return `Version ${v} already has its short answer question (${PARTS.short} points).`;
+    }
+  }
   return null;
 }

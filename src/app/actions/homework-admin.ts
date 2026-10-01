@@ -70,6 +70,7 @@ export async function deleteHomework(formData: FormData) {
 export async function saveQuestion(_prev: FormState, formData: FormData): Promise<FormState> {
   await requireUser("admin");
   const id = text(formData, "id");
+  let warning: string | undefined;
   try {
     const q = await ops.saveQuestion({
       id: id || undefined,
@@ -82,11 +83,13 @@ export async function saveQuestion(_prev: FormState, formData: FormData): Promis
       options: formData.getAll("options").map(String),
       correct_option: text(formData, "correct_option"),
     });
+    warning = q.warning;
     revalidatePath(`/admin/homework/${q.homework_id}`);
   } catch (e) {
     return fail(e);
   }
-  return { ok: id ? "Question saved." : "Question added." };
+  const done = id ? "Question saved." : "Question added.";
+  return { ok: warning ? `${done} ${warning}` : done };
 }
 
 export async function deleteQuestion(formData: FormData) {

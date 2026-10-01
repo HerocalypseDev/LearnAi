@@ -2,9 +2,9 @@ import "server-only";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { loadMarking } from "./marking";
-import { autoPoints, clampPoints, computeGrade, PARTS, passwordProblem } from "./rules";
+import { checkQuestionBudget, clampPoints, computeGrade, normalizeMcq, PARTS, passwordProblem, quizScore } from "./rules";
 import { fromLagosInputs, toLagosInputs } from "./time";
-import type { Homework, QuizQuestion, User } from "./types";
+import type { Grade, Homework, QuizQuestion, User } from "./types";
 
 // Every admin change lives here, so the website (server actions) and Jarvis (the API in
 // app/api/jarvis) follow exactly the same rules. Callers check who is allowed first.
@@ -127,10 +127,23 @@ export async function createHomework(input: HomeworkInput): Promise<Homework> {
   return holder.created;
 }
 
+// Policy: the deadline can't move once anyone has handed in. days_late, penalties and released grades were
+// all worked out against the old deadline, so a quiet change would leave them wrong. Delete nothing, ask the teacher to re-open instead.
 export async function updateHomework(id: unknown, input: HomeworkInput): Promise<Homework> {
   const current = await getHomework(id);
   const row = homeworkRow(input, current);
   if (Object.keys(row).length === 0) return current;
+  if (typeof row.due_at === "string" && new Date(row.due_at).getTime() !== new Date(current.due_at).getTime()) {
+    const { count, error } = await db()
+      .from("submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("homework_id", current.id)
+      .eq("status", "submitted");
+    if (error) throw new OpError(error.message, 500);
+    if ((count ?? 0) > 0) {
+      throw new OpError("Someone has already handed this in, so the deadline can't change (their lateness and marks depend on it).");
+    }
+  }
   await withOptionalColumns(row, ["marking_notes"], (r) => db().from("homeworks").update(r).eq("id", current.id));
   return getHomework(current.id);
 }
@@ -157,7 +170,7 @@ export interface QuestionInput {
   position?: unknown;
 }
 
-export async function saveQuestion(input: QuestionInput): Promise<QuizQuestion> {
+export async function saveQuestion(input: QuestionInput): Promise<QuizQuestion & { warning?: string }> {
   const existing = input.id
     ? (
         await db()
@@ -183,20 +196,28 @@ export async function saveQuestion(input: QuestionInput): Promise<QuizQuestion> 
     throw new OpError(`Points must be a whole number from 1 to ${PARTS.mcq}.`);
   }
 
-  const options: string[] = [];
+  let options: string[] = [];
   let correctOption: number | null = null;
   if (type === "mcq") {
-    const raw = Array.isArray(input.options) ? input.options.map((o) => String(o ?? "").trim()) : (existing?.options ?? []);
-    const correctRaw = Number(input.correct_option ?? (Array.isArray(input.options) ? NaN : existing?.correct_option));
-    for (const [i, option] of raw.entries()) {
-      if (!option) continue;
-      if (i === correctRaw) correctOption = options.length;
-      options.push(option.slice(0, 300));
-    }
-    if (options.length < 2) throw new OpError("Multiple choice needs at least 2 options.");
-    if (options.length > 6) throw new OpError("Multiple choice can have at most 6 options.");
-    if (correctOption === null) throw new OpError("Say which option is correct (correct_option, counting from 0).");
+    const rawOptions = Array.isArray(input.options) ? input.options : (existing?.options ?? []);
+    const correctRaw = Array.isArray(input.options) ? input.correct_option : (input.correct_option ?? existing?.correct_option);
+    const mcq = normalizeMcq(rawOptions, correctRaw);
+    if ("error" in mcq) throw new OpError(mcq.error);
+    options = mcq.options;
+    correctOption = mcq.correct;
   }
+
+  const { data: siblings, error: siblingError } = await db()
+    .from("quiz_questions")
+    .select("id, version, type, points")
+    .eq("homework_id", homework.id)
+    .returns<Pick<QuizQuestion, "id" | "version" | "type" | "points">[]>();
+  if (siblingError) throw new OpError(siblingError.message, 500);
+  const budgetProblem = checkQuestionBudget(
+    (siblings ?? []).filter((q) => q.id !== existing?.id),
+    { version: version as QuizQuestion["version"], type, points },
+  );
+  if (budgetProblem) throw new OpError(budgetProblem);
 
   let position = input.position !== undefined && input.position !== "" ? Number(input.position) : existing?.position;
   if (position === undefined || !Number.isFinite(position)) {
@@ -209,6 +230,19 @@ export async function saveQuestion(input: QuestionInput): Promise<QuizQuestion> 
     ? await db().from("quiz_questions").update(row).eq("id", existing.id).select("*").single<QuizQuestion>()
     : await db().from("quiz_questions").insert(row).select("*").single<QuizQuestion>();
   if (error || !data) throw new OpError(error?.message ?? "Could not save the question.", 500);
+
+  // Marks are always recomputed from the current question when you save marks, but grades already saved
+  // (and possibly released) keep their old numbers until then. Say so instead of changing them silently.
+  if (existing?.type === "mcq" && (existing.correct_option !== data.correct_option || existing.points !== data.points)) {
+    const { count } = await db()
+      .from("answers")
+      .select("id", { count: "exact", head: true })
+      .eq("question_id", data.id)
+      .not("selected_option", "is", null);
+    if ((count ?? 0) > 0) {
+      return { ...data, warning: `${count} answer(s) already exist. Open each marked homework and Save again to update its score.` };
+    }
+  }
   return data;
 }
 
@@ -247,25 +281,29 @@ export async function saveMarks(input: MarksInput) {
   if (data.submission.status !== "submitted") throw new OpError(`${data.student.full_name} hasn't handed this homework in yet.`);
   const { submission, homework, questions, answers, penalty, grade } = data;
 
-  let quizPoints = 0;
+  // Multiple choice is re-marked from the questions as they are now, never from the stored auto_points.
+  const picks: Record<string, { selected_option: number | null; manual_points: number | null }> = {};
+  for (const q of questions) {
+    const existing = answers[q.id];
+    const given = input.shortPoints?.[q.id];
+    picks[q.id] = {
+      selected_option: existing?.selected_option ?? null,
+      manual_points: q.type === "short" ? (given !== undefined ? clampPoints(given, q.points) : (existing?.manual_points ?? 0)) : null,
+    };
+  }
+  const quizPoints = quizScore(questions, picks, homework.quiz_points).total;
   const answerRows = questions.map((q) => {
     const existing = answers[q.id];
-    const auto = autoPoints(q, existing?.selected_option ?? null);
-    const given = input.shortPoints?.[q.id];
-    const manual =
-      q.type === "short" ? (given !== undefined ? clampPoints(given, q.points) : (existing?.manual_points ?? 0)) : null;
-    quizPoints += auto ?? manual ?? 0;
     return {
       submission_id: submission.id,
       question_id: q.id,
       answer_text: existing?.answer_text ?? null,
-      selected_option: existing?.selected_option ?? null,
-      auto_points: auto,
-      manual_points: manual,
+      selected_option: picks[q.id].selected_option,
+      auto_points: q.type === "mcq" ? quizScore([q], picks, q.points).mcq : null,
+      manual_points: picks[q.id].manual_points,
       updated_at: existing?.updated_at ?? new Date().toISOString(),
     };
   });
-  quizPoints = Math.min(quizPoints, homework.quiz_points);
 
   if (answerRows.length) {
     const { error } = await db().from("answers").upsert(answerRows, { onConflict: "submission_id,question_id" });
@@ -297,17 +335,21 @@ export async function saveMarks(input: MarksInput) {
   };
   await withOptionalColumns(row, ["marked_by"], (r) => db().from("grades").upsert(r, { onConflict: "submission_id" }));
 
+  // Marking is last-write-wins (two people saving at once: the later save stands). Report what is actually
+  // stored now, so the caller (page or Jarvis) sees the truth rather than what it sent.
+  const { data: saved } = await db().from("grades").select("*").eq("submission_id", submission.id).maybeSingle<Grade>();
+  const stored = saved ?? { ...row, id: "", marked_by: row.marked_by };
   return {
     student: data.student.full_name,
     homework: homework.title,
-    quiz_points: quizPoints,
-    task_points: taskPoints,
-    late_penalty,
-    final_points,
+    quiz_points: stored.quiz_points,
+    task_points: stored.task_points,
+    late_penalty: stored.late_penalty,
+    final_points: stored.final_points,
     max_points: homework.max_points,
-    comment,
-    released: releasedAt !== null,
-    visible_to_child: releasedAt !== null && Date.now() > new Date(homework.due_at).getTime(),
+    comment: stored.comment,
+    released: stored.released_at !== null,
+    visible_to_child: stored.released_at !== null && Date.now() > new Date(homework.due_at).getTime(),
   };
 }
 
