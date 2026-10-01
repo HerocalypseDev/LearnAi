@@ -2,6 +2,7 @@
 // to tell the kids' phone and laptops apart.
 
 export function describeDevice(ua: string): string {
+  if (/Jarvis/i.test(ua)) return "Jarvis assistant";
   const os =
     /iPhone/.test(ua) ? "iPhone"
     : /iPad/.test(ua) ? "iPad"
@@ -21,6 +22,7 @@ export function describeDevice(ua: string): string {
 export function describeBrowser(ua: string): string {
   const match = (re: RegExp) => ua.match(re)?.[1]?.split(".")[0];
   let v: string | undefined;
+  if ((v = match(/Jarvis[^/]*\/([\d.]+)/i))) return `Jarvis ${v}`;
   if ((v = match(/Edg(?:A|iOS)?\/([\d.]+)/))) return `Edge ${v}`;
   if ((v = match(/OPR\/([\d.]+)/))) return `Opera ${v}`;
   if ((v = match(/SamsungBrowser\/([\d.]+)/))) return `Samsung Internet ${v}`;

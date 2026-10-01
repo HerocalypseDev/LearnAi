@@ -36,6 +36,11 @@ export function SubmissionRow({ item, showHomework = false }: { item: Submission
         </div>
       </div>
       <span className="flex shrink-0 items-center gap-2">
+        {grade?.marked_by === "jarvis" && (
+          <span title="Marked by Jarvis" className="rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-800 ring-1 ring-cyan-200">
+            🤖 Jarvis
+          </span>
+        )}
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${status.className}`}>{status.text}</span>
         <span className="text-indigo-400 transition group-hover:translate-x-1 group-hover:text-indigo-600" aria-hidden="true">
           →

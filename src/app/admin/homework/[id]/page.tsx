@@ -140,7 +140,7 @@ export default async function EditHomeworkPage({ params, searchParams }: PagePro
             ]}
           />
           <div className={cardClass}>
-            <TaskForm id={homework.id} a={homework.instructions_a} b={homework.instructions_b} names={names} />
+            <TaskForm id={homework.id} a={homework.instructions_a} b={homework.instructions_b} notes={homework.marking_notes ?? ""} names={names} />
           </div>
         </section>
 

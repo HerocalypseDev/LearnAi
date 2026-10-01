@@ -60,6 +60,18 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 2. On the admin page, set a password for each child.
 3. The children log in with their name as the username (capital letters don't matter) and the password you gave them.
 
+## Jarvis (optional): let your AI assistant act as the admin
+
+The app has a private API at `/api/jarvis` that lets Jarvis do everything you can do here, using the same rules as the website: read scores and progress, create and edit homework, mark, release, attendance, settings and CSV exports. Every change Jarvis makes shows in **Activity → 🤖 Jarvis**, and marks it saves are labelled **Marked by Jarvis**.
+
+1. **Supabase:** paste `supabase/migrations/001_jarvis.sql` into the SQL Editor and click **Run**. It's safe to run twice.
+2. **Vercel → Settings → Environment Variables:** add `JARVIS_API_TOKEN` (a random secret of 32+ characters; for example, run `python -c "import secrets; print(secrets.token_urlsafe(40))"`), then redeploy.
+   - Optional: `JARVIS_API_READ_ONLY=1` lets Jarvis look but not change anything.
+   - Delete the token to cut Jarvis off instantly.
+3. **Jarvis side:** follow `docs/JARVIS_INTEGRATION_PLAN.md`, a step-by-step plan for Claude Code in the Jarvis repo.
+
+**Settings → 🤖 Jarvis** shows whether access is on. On each homework, the Task section has a private **Marking notes** box. Jarvis follows these notes when it marks; the kids never see them.
+
 ## Local development
 
 ```bash

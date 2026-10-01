@@ -16,6 +16,7 @@ const EVENTS: Record<string, string> = {
   upload: "File",
   submit: "Handed in",
   view_feedback: "Viewed result",
+  admin_action: "🤖 Jarvis did",
 };
 const LIMIT = 300;
 
@@ -40,13 +41,22 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
     db().from("homeworks").select("id, title").returns<{ id: string; title: string }[]>(),
   ]);
   const ids = (students ?? []).map((s) => s.id);
+  const { data: admin } = await db().from("users").select("id").eq("role", "admin").limit(1).maybeSingle();
+  const jarvisView = studentFilter === "jarvis";
 
   let query = db().from("activity_log").select("*").order("created_at", { ascending: false }).limit(LIMIT);
-  query = studentFilter && ids.includes(studentFilter) ? query.eq("user_id", studentFilter) : query.in("user_id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
+  if (jarvisView) {
+    query = query.eq("event", "admin_action");
+  } else if (studentFilter && ids.includes(studentFilter)) {
+    query = query.eq("user_id", studentFilter);
+  } else {
+    // Both children, plus anything Jarvis did (logged against the admin account).
+    query = query.or(`user_id.in.(${(ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]).join(",")}),event.eq.admin_action`);
+  }
   if (eventFilter) query = query.eq("event", eventFilter);
   const { data: rows } = await query.returns<Row[]>();
 
-  const name = (id: string) => students?.find((s) => s.id === id)?.full_name ?? "?";
+  const name = (id: string) => students?.find((s) => s.id === id)?.full_name ?? (id === admin?.id ? "Admin" : "?");
   const hwTitle = (id: unknown) => homeworks?.find((h) => h.id === id)?.title;
   const dayKey = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(new Date(iso));
   const days = [...new Set((rows ?? []).map((r) => dayKey(r.created_at)))];
@@ -91,6 +101,9 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
                 {s.full_name}
               </Link>
             ))}
+            <Link href={filterLink({ student: "jarvis", event: "" })} className={chip(jarvisView)}>
+              🤖 Jarvis
+            </Link>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             <Link href={filterLink({ event: "" })} className={chip(!eventFilter)}>
@@ -115,7 +128,7 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
                   <li key={r.id} className="grid grid-cols-[3.5rem_1fr] gap-2">
                     <span className="tabular-nums text-slate-500">{formatDateTime(r.created_at).split(", ").pop()}</span>
                     <span>
-                      <span className="font-medium">{name(r.user_id)}</span> · {EVENTS[r.event] ?? r.event}
+                      <span className="font-medium">{r.event === "admin_action" ? "Jarvis" : name(r.user_id)}</span> · {EVENTS[r.event] ?? r.event}
                       <Detail row={r} hwTitle={hwTitle(r.detail.homework_id)} />
                       <span className="block text-xs text-slate-400">
                         {r.device} · {r.browser}
@@ -143,6 +156,12 @@ function Detail({ row, hwTitle }: { row: Row; hwTitle?: string }) {
   if (row.event === "answer_change" && Number(d.active_ms) > 0) parts.push(`${Math.round(Number(d.active_ms) / 1000)}s on question`);
   if (row.event === "answer_change" && typeof d.length === "number") parts.push(`${d.length} characters`);
   if (row.event === "submit" && Number(d.days_late) > 0) parts.push(`${d.days_late} day(s) late`);
+  if (row.event === "admin_action") {
+    parts.push(String(d.tool ?? "").replace(/_/g, " "));
+    const args = (d.args ?? {}) as Record<string, unknown>;
+    if (args.student) parts.push(String(args.student));
+    if (d.ok === false) parts.push(`failed: ${String(d.error ?? "")}`);
+  }
   if (parts.length === 0) return null;
   return <span className="text-slate-600"> — {parts.join(" · ")}</span>;
 }

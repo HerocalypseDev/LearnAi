@@ -6,7 +6,7 @@ import { saveTaskInstructions, type FormState } from "@/app/actions/homework-adm
 import { buttonClass, inputClass } from "@/components/ui";
 import type { VersionNames } from "./homework-form";
 
-export function TaskForm({ id, a, b, names }: { id: string; a: string; b: string; names: VersionNames }) {
+export function TaskForm({ id, a, b, notes, names }: { id: string; a: string; b: string; notes: string; names: VersionNames }) {
   const [state, action, pending] = useActionState<FormState, FormData>(saveTaskInstructions, {});
   return (
     <form action={action} className="space-y-3">
@@ -18,6 +18,17 @@ export function TaskForm({ id, a, b, names }: { id: string; a: string; b: string
       <label className="block">
         <span className="text-sm font-medium text-slate-700">Task instructions — Version B ({names.B})</span>
         <textarea name="instructions_b" defaultValue={b} rows={7} className={`mt-1 ${inputClass}`} />
+      </label>
+      <label className="block">
+        <span className="text-sm font-medium text-slate-700">🔒 Marking notes for Jarvis (the kids never see this)</span>
+        <span className="block text-xs text-slate-500">What a great answer and task look like, and how to split the 60 points. Jarvis uses this when it marks.</span>
+        <textarea
+          name="marking_notes"
+          defaultValue={notes}
+          rows={4}
+          placeholder="e.g. Task: 20 for a clear drawing, 20 for labelling 3 parts, 20 for effort and creativity. Short answer: must mention that sensors collect information."
+          className={`mt-1 ${inputClass}`}
+        />
       </label>
       <div className="flex items-center gap-3">
         <button disabled={pending} className={buttonClass}>

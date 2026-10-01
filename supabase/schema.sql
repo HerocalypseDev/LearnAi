@@ -29,6 +29,7 @@ create table if not exists homeworks (
   max_points     int not null default 100,
   quiz_points    int not null default 40,
   task_points    int not null default 60,
+  marking_notes  text not null default '',
   created_at     timestamptz not null default now()
 );
 
@@ -86,7 +87,8 @@ create table if not exists grades (
   late_penalty  int not null default 0,
   final_points  int not null default 0,
   comment       text,
-  released_at   timestamptz
+  released_at   timestamptz,
+  marked_by     text not null default 'admin'
 );
 
 create table if not exists attendance (
@@ -103,7 +105,7 @@ create table if not exists activity_log (
   user_id    uuid references users (id) on delete cascade,
   event      text not null check (event in (
                'login', 'login_failed', 'logout', 'page_view', 'quiz_start',
-               'answer_change', 'upload', 'submit', 'view_feedback')),
+               'answer_change', 'upload', 'submit', 'view_feedback', 'admin_action')),
   detail     jsonb not null default '{}'::jsonb,
   device     text,
   browser    text,

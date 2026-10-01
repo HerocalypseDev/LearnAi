@@ -90,7 +90,7 @@ export interface SubmissionSummary {
   student: Pick<User, "id" | "full_name" | "version">;
   homework: Pick<Homework, "id" | "title" | "week" | "due_at">;
   submission: Pick<Submission, "id" | "status" | "submitted_at" | "days_late"> | null;
-  grade: Pick<Grade, "final_points" | "released_at"> | null;
+  grade: Pick<Grade, "final_points" | "released_at" | "marked_by"> | null;
 }
 
 /** Every student x homework pair, optionally for one homework. */
@@ -104,7 +104,8 @@ export async function loadSubmissionSummaries(homeworkId?: string): Promise<Subm
     hw.returns<SubmissionSummary["homework"][]>(),
     db().from("users").select("id, full_name, version").eq("role", "student").order("full_name").returns<SubmissionSummary["student"][]>(),
     subs.returns<(NonNullable<SubmissionSummary["submission"]> & { homework_id: string; student_id: string })[]>(),
-    db().from("grades").select("submission_id, final_points, released_at").returns<(NonNullable<SubmissionSummary["grade"]> & { submission_id: string })[]>(),
+    // select("*") so marked_by is included once the Jarvis migration has run, without breaking before it.
+    db().from("grades").select("*").returns<(NonNullable<SubmissionSummary["grade"]> & { submission_id: string })[]>(),
   ]);
 
   const out: SubmissionSummary[] = [];

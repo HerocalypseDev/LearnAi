@@ -50,6 +50,11 @@ export default async function MarkPage({ params }: PageProps<"/admin/homework/[i
             {student.full_name} — {homework.title}
           </h1>
           <p className="mt-1 text-sm text-slate-600">Due {formatDateTime(homework.due_at)}</p>
+          {grade?.marked_by === "jarvis" && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-800 ring-1 ring-cyan-200">
+              🤖 Marked by Jarvis. Check it, change anything you like, then Save.
+            </p>
+          )}
           <p className="mt-1 text-sm">
             {submitted && submission?.submitted_at ? (
               <>

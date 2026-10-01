@@ -22,6 +22,8 @@ export interface Homework {
   max_points: number;
   quiz_points: number;
   task_points: number;
+  /** Admin-only notes Jarvis uses when marking (never shown to the kids). Missing until the Jarvis migration runs. */
+  marking_notes?: string | null;
 }
 
 export interface Submission {
@@ -43,6 +45,8 @@ export interface Grade {
   final_points: number;
   comment: string | null;
   released_at: string | null;
+  /** Who saved the marks: "admin" or "jarvis". Missing until the Jarvis migration runs. */
+  marked_by?: string | null;
 }
 
 export interface Settings {
@@ -59,7 +63,8 @@ export type ActivityEvent =
   | "answer_change"
   | "upload"
   | "submit"
-  | "view_feedback";
+  | "view_feedback"
+  | "admin_action";
 
 export interface QuizQuestion {
   id: string;
