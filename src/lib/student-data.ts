@@ -40,3 +40,11 @@ export async function loadStudentHomework(studentId: string, homeworkId?: string
     return { homework, submission, grade, status: homeworkStatus(dueAt, submission, now) };
   });
 }
+
+/** "James" / "Peter" for labelling versions A and B in the admin screens. */
+export async function versionNames(): Promise<{ A: string; B: string }> {
+  const { data } = await db().from("users").select("full_name, version").eq("role", "student");
+  const name = (v: string) =>
+    (data ?? []).filter((u) => u.version === v).map((u) => u.full_name).join(", ") || `Version ${v}`;
+  return { A: name("A"), B: name("B") };
+}

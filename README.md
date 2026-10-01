@@ -7,12 +7,16 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 - Its own username + password login. Passwords are hashed with bcrypt and sessions are signed cookies.
 - All deadlines use Lagos time (WAT, UTC+1)
 
-## What's built so far (phase 1)
+## What's built so far
 
 - Database schema (`supabase/schema.sql`) and seed data for the admin and the two students (`supabase/seed.sql`)
 - Login with lockout after 10 wrong tries in 15 minutes, plus logout
 - Student dashboard with points, course progress for weeks 1–4, homework due next (live countdown), missed work and handed-in work
 - Homework page showing the child's own version (A or B) of the instructions, and the result once it is visible
+- Quiz (multiple choice and short answer) that saves as the child types. Multiple choice is marked automatically, and correct answers never reach the browser.
+- File uploads that go straight from the browser to private Supabase storage, with progress bars and previews for images and PDFs. Program files (.exe, .apk, .bat, .msi, .sh, .js and similar) are blocked, files are limited to 20MB each, and each homework takes at most 10 files.
+- One final "Hand in" that locks the work and records how many days late it is
+- Admin homework builder: title, week, due date and time (Lagos), A and B instructions, and quiz questions per version with a check that each version's quiz adds up to 40 points
 - Admin page with both students side by side, and setting each student's password and your own
 - Activity log of logins, failed logins, logouts, page views and feedback views, each with device and browser
 - Scores are hidden until the deadline has passed **and** the admin has released the marking. This is enforced on the server.
@@ -24,7 +28,8 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 1. Sign up at <https://supabase.com> and create a **New project**. Pick the region closest to Lagos (a Europe region is fine) and save the database password somewhere safe.
 2. Open **SQL Editor → New query**, paste all of `supabase/schema.sql`, then click **Run**.
 3. Paste all of `supabase/seed.sql` (James, version A, and Peter, version B) into a new query, then click **Run**.
-4. Go to **Project Settings → API Keys** and copy the **secret** key (it starts with `sb_secret_`). Then find the **Project URL** (`https://xxxx.supabase.co`) under **Project Settings → Data API**.
+4. Paste all of `supabase/storage.sql` into a new query, then click **Run**. It creates the private `uploads` storage bucket for homework files.
+5. Go to **Project Settings → API Keys** and copy the **secret** key (it starts with `sb_secret_`). Then find the **Project URL** (`https://xxxx.supabase.co`) under **Project Settings → Data API**.
 
 ### 2. Vercel (website)
 

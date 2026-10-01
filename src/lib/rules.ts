@@ -38,3 +38,37 @@ export function homeworkStatus(
   if (now.getTime() > dueAt.getTime()) return "missing";
   return submission ? "in_progress" : "upcoming";
 }
+
+// ---- Uploads ----
+
+export const MAX_FILE_BYTES = 20 * 1024 * 1024;
+export const MAX_FILES = 10;
+export const BLOCKED_EXTENSIONS = [
+  "exe", "apk", "bat", "msi", "sh", "js",
+  "cmd", "com", "scr", "ps1", "vbs", "jar", "dll", "app", "dmg", "deb", "rpm", "msix", "appx", "ipa",
+];
+
+export function fileExtension(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot === -1 ? "" : name.slice(dot + 1).toLowerCase();
+}
+
+/** Returns a child-friendly error, or null if the file is allowed. */
+export function checkUpload(name: string, sizeBytes: number, filesAlready: number): string | null {
+  if (filesAlready >= MAX_FILES) return `You can attach up to ${MAX_FILES} files.`;
+  if (BLOCKED_EXTENSIONS.includes(fileExtension(name))) return `"${name}" is a program file, which isn't allowed.`;
+  if (sizeBytes <= 0) return `"${name}" is empty.`;
+  if (sizeBytes > MAX_FILE_BYTES) return `"${name}" is bigger than 20MB.`;
+  return null;
+}
+
+// ---- Quiz ----
+
+/** Multiple choice is auto-marked; short answers are marked by the admin (null until then). */
+export function autoPoints(
+  question: { type: "mcq" | "short"; correct_option: number | null; points: number },
+  selectedOption: number | null,
+): number | null {
+  if (question.type !== "mcq") return null;
+  return selectedOption !== null && selectedOption === question.correct_option ? question.points : 0;
+}

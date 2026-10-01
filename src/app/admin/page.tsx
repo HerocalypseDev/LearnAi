@@ -1,4 +1,4 @@
-import { TopBar } from "@/components/top-bar";
+import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
@@ -17,7 +17,7 @@ export default async function AdminPage() {
 
   return (
     <>
-      <TopBar name="Admin" home="/admin" badge="Teacher" />
+      <TopBar name="Admin" home="/admin" badge="Teacher" links={ADMIN_LINKS} />
       <main className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
         <h1 className="text-2xl font-bold">Overview</h1>
 

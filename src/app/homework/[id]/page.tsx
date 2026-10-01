@@ -5,8 +5,15 @@ import { StatusPill } from "@/components/status-pill";
 import { TopBar } from "@/components/top-bar";
 import { logActivity } from "@/lib/activity";
 import { requireUser } from "@/lib/session";
+import { db } from "@/lib/db";
+import { DEFAULT_PENALTY } from "@/lib/rules";
+import { signedLinks } from "@/lib/storage";
 import { loadStudentHomework } from "@/lib/student-data";
 import { formatDateTime } from "@/lib/time";
+import type { Answer, Settings, StudentQuestion, Upload } from "@/lib/types";
+import { Quiz, type SavedAnswer } from "./quiz";
+import { SubmitPanel } from "./submit-panel";
+import { Uploads, type UploadView } from "./uploads";
 
 export default async function HomeworkPage({ params }: PageProps<"/homework/[id]">) {
   const { id } = await params;
@@ -17,8 +24,47 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
   if (!item) notFound();
   const { homework, status, grade, submission } = item;
 
-  await logActivity(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id });
+  const [{ data: questions }, { data: answers }, { data: uploads }, { data: settings }] = await Promise.all([
+    db()
+      .from("quiz_questions")
+      // Never select correct_option here: this goes to the browser.
+      .select("id, version, type, prompt, options, points, position")
+      .eq("homework_id", id)
+      .in("version", ["both", student.version ?? "A"])
+      .order("position")
+      .order("id")
+      .returns<StudentQuestion[]>(),
+    submission
+      ? db().from("answers").select("*").eq("submission_id", submission.id).returns<Answer[]>()
+      : Promise.resolve({ data: [] as Answer[] }),
+    submission
+      ? db().from("uploads").select("*").eq("submission_id", submission.id).order("uploaded_at").returns<Upload[]>()
+      : Promise.resolve({ data: [] as Upload[] }),
+    db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>(),
+    logActivity(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id }),
+  ]);
 
+  const quiz = questions ?? [];
+  const links = await signedLinks((uploads ?? []).map((u) => u.storage_path));
+  const uploadViews: UploadView[] = (uploads ?? []).map((u) => ({
+    id: u.id,
+    file_name: u.file_name,
+    file_type: u.file_type,
+    size_bytes: u.size_bytes,
+    link: links[u.storage_path] ?? null,
+  }));
+  const saved: Record<string, SavedAnswer> = {};
+  const earned: Record<string, number | null> = {};
+  for (const a of answers ?? []) {
+    saved[a.question_id] = { answer_text: a.answer_text, selected_option: a.selected_option };
+    earned[a.question_id] = a.manual_points ?? a.auto_points;
+  }
+  const unanswered = quiz.filter((q) => {
+    const a = saved[q.id];
+    return !a || (q.type === "mcq" ? a.selected_option === null : !a.answer_text?.trim());
+  }).length;
+
+  const locked = submission?.status === "submitted";
   const instructions = student.version === "B" ? homework.instructions_b : homework.instructions_a;
   const isOpen = status === "upcoming" || status === "in_progress";
 
@@ -86,9 +132,37 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
           )}
         </section>
 
-        <section className="rounded-2xl border-2 border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">
-          The quiz and file upload will appear here.
+        {quiz.length > 0 && (
+          <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+            <h2 className="mb-3 font-semibold">Quiz</h2>
+            <Quiz homeworkId={id} questions={quiz} initial={saved} locked={locked} earned={grade ? earned : undefined} />
+          </section>
+        )}
+
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <h2 className="mb-3 font-semibold">Your files</h2>
+          <Uploads homeworkId={id} uploads={uploadViews} locked={locked} />
         </section>
+
+        {locked ? (
+          <section className="rounded-2xl bg-emerald-50 p-5 text-center ring-1 ring-emerald-200">
+            <p className="font-semibold text-emerald-800">✅ Handed in</p>
+            <p className="mt-1 text-sm text-emerald-700">
+              {grade ? "Your result is above." : "Your teacher will mark it after the deadline."}
+            </p>
+          </section>
+        ) : (
+          <SubmitPanel
+            homeworkId={id}
+            dueAt={homework.due_at}
+            unanswered={unanswered}
+            fileCount={uploadViews.length}
+            penalty={{
+              perDay: settings?.late_penalty_per_day ?? DEFAULT_PENALTY.perDay,
+              cap: settings?.late_penalty_cap ?? DEFAULT_PENALTY.cap,
+            }}
+          />
+        )}
       </main>
     </>
   );

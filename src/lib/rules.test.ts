@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
+import { autoPoints, checkUpload, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
+import { fromLagosInputs, toLagosInputs } from "./time";
 
 // Wednesday 7 Oct 2026, 21:00 in Lagos (UTC+1) = 20:00 UTC.
 const due = new Date("2026-10-07T21:00:00+01:00");
@@ -68,5 +69,48 @@ describe("homeworkStatus", () => {
   it("is submitted or late once handed in", () => {
     expect(homeworkStatus(due, { status: "submitted", submitted_at: "2026-10-07T20:00:00+01:00" }, after)).toBe("submitted");
     expect(homeworkStatus(due, { status: "submitted", submitted_at: "2026-10-07T21:01:00+01:00" }, after)).toBe("late");
+  });
+});
+
+describe("checkUpload", () => {
+  it("accepts documents and images under 20MB", () => {
+    expect(checkUpload("essay.docx", 1_000_000, 0)).toBeNull();
+    expect(checkUpload("game.sb3", 5_000_000, 3)).toBeNull();
+    expect(checkUpload("photo.JPG", 20 * 1024 * 1024, 9)).toBeNull();
+  });
+
+  it("rejects program files whatever the capitals", () => {
+    expect(checkUpload("virus.exe", 100, 0)).toMatch(/program file/);
+    expect(checkUpload("script.JS", 100, 0)).toMatch(/program file/);
+    expect(checkUpload("app.apk", 100, 0)).toMatch(/program file/);
+  });
+
+  it("rejects a 25MB file and an 11th file", () => {
+    expect(checkUpload("video.mp4", 25 * 1024 * 1024, 0)).toMatch(/20MB/);
+    expect(checkUpload("one-more.png", 100, 10)).toMatch(/up to 10/);
+  });
+});
+
+describe("autoPoints", () => {
+  const mcq = { type: "mcq" as const, correct_option: 2, points: 5 };
+  it("gives full points for the right option and zero otherwise", () => {
+    expect(autoPoints(mcq, 2)).toBe(5);
+    expect(autoPoints(mcq, 1)).toBe(0);
+    expect(autoPoints(mcq, null)).toBe(0);
+  });
+  it("leaves short answers for the admin", () => {
+    expect(autoPoints({ type: "short", correct_option: null, points: 10 }, null)).toBeNull();
+  });
+});
+
+describe("Lagos date inputs", () => {
+  it("round-trips 21:00 Lagos time", () => {
+    const d = fromLagosInputs("2026-10-07", "21:00");
+    expect(d?.toISOString()).toBe("2026-10-07T20:00:00.000Z");
+    expect(toLagosInputs(d!)).toEqual({ date: "2026-10-07", time: "21:00" });
+  });
+  it("rejects junk", () => {
+    expect(fromLagosInputs("", "21:00")).toBeNull();
+    expect(fromLagosInputs("2026-13-45", "21:00")).toBeNull();
   });
 });

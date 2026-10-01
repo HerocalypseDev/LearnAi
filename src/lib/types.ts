@@ -60,3 +60,39 @@ export type ActivityEvent =
   | "upload"
   | "submit"
   | "view_feedback";
+
+export interface QuizQuestion {
+  id: string;
+  homework_id: string;
+  version: "A" | "B" | "both";
+  type: "mcq" | "short";
+  prompt: string;
+  options: string[];
+  correct_option: number | null;
+  points: number;
+  position: number;
+}
+
+/** What a student is allowed to see of a question: no correct answer. */
+export type StudentQuestion = Omit<QuizQuestion, "correct_option" | "homework_id">;
+
+export interface Answer {
+  id: string;
+  submission_id: string;
+  question_id: string;
+  answer_text: string | null;
+  selected_option: number | null;
+  auto_points: number | null;
+  manual_points: number | null;
+  updated_at: string;
+}
+
+export interface Upload {
+  id: string;
+  submission_id: string;
+  file_name: string;
+  file_type: string | null;
+  size_bytes: number;
+  storage_path: string;
+  uploaded_at: string;
+}
