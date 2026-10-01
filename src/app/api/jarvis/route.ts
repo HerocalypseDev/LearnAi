@@ -4,6 +4,7 @@ import { logActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { checkArgs, redactArgs } from "@/lib/jarvis/args";
 import { checkJarvisToken } from "@/lib/jarvis/auth";
+import { MAX_BODY_BYTES, parseJarvisBody } from "@/lib/jarvis/body";
 import { findTool, revalidateAll, TOOLS } from "@/lib/jarvis/tools";
 
 // Jarvis's door into the app. Every request needs "Authorization: Bearer <JARVIS_API_TOKEN>".
@@ -50,36 +51,43 @@ export async function POST(req: NextRequest) {
   const denied = authorize(req);
   if (denied) return denied;
 
-  let body: { tool?: unknown; args?: unknown };
-  try {
-    body = await req.json();
-  } catch {
-    return json({ ok: false, error: 'Send JSON like {"tool": "get_overview", "args": {}}.' }, 400);
+  // Content-Length can be missing (chunked), so the size is checked again on the text itself.
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) {
+    return json({ ok: false, error: `Request too large (max ${MAX_BODY_BYTES / 1024} KB).` }, 413);
   }
+  const body = parseJarvisBody(await req.text(), req.headers.get("content-length"));
+  if (!body.ok) return json({ ok: false, error: body.error }, body.status);
 
   const tool = findTool(body.tool);
-  if (!tool) return json({ ok: false, error: `Unknown tool "${String(body.tool)}". GET /api/jarvis lists them.` }, 404);
-  if (tool.writes && readOnly()) return json({ ok: false, error: "Jarvis is in read-only mode (JARVIS_API_READ_ONLY=1)." }, 403);
-
-  const checked = checkArgs(tool.input_schema, body.args);
-  if (!checked.ok) return json({ ok: false, error: checked.error }, 400);
+  if (!tool) return json({ ok: false, error: `Unknown tool "${body.tool}". GET /api/jarvis lists them.` }, 404);
 
   let status = 200;
   let response: { ok: boolean; result?: unknown; error?: string };
-  try {
-    response = { ok: true, result: await tool.run(checked.args) };
-  } catch (e) {
-    if (e instanceof OpError) {
-      status = e.status;
-      response = { ok: false, error: e.message };
-    } else {
-      console.error(`jarvis tool ${tool.name} failed`, e);
-      status = 500;
-      response = { ok: false, error: "Something went wrong in the homework app. Check the Vercel logs." };
+  const checked = checkArgs(tool.input_schema, body.args);
+  const loggedArgs = checked.ok ? checked.args : {};
+
+  if (tool.writes && readOnly()) {
+    status = 403;
+    response = { ok: false, error: "Jarvis is in read-only mode (JARVIS_API_READ_ONLY=1)." };
+  } else if (!checked.ok) {
+    status = 400;
+    response = { ok: false, error: checked.error };
+  } else {
+    try {
+      response = { ok: true, result: await tool.run(checked.args) };
+    } catch (e) {
+      if (e instanceof OpError) {
+        status = e.status;
+        response = { ok: false, error: e.message };
+      } else {
+        console.error(`jarvis tool ${tool.name} failed`, e);
+        status = 500;
+        response = { ok: false, error: "Something went wrong in the homework app. Check the Vercel logs." };
+      }
     }
   }
 
-  // Changes (and failed attempts at them) appear in the admin Activity log as "Jarvis".
+  // Every write attempt (done, refused or failed) appears in the admin Activity log as "Jarvis".
   if (tool.writes) {
     const id = await adminId();
     if (id) {
@@ -88,7 +96,7 @@ export async function POST(req: NextRequest) {
         tool: tool.name,
         ok: response.ok,
         error: response.error,
-        args: redactArgs(checked.args),
+        args: redactArgs(loggedArgs),
       });
     }
     if (response.ok) await revalidateAll();

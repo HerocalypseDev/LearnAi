@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { checkArgs, redactArgs, type JsonSchema } from "./args";
 import { checkJarvisToken } from "./auth";
+import { MAX_BODY_BYTES, parseJarvisBody } from "./body";
 
 const TOKEN = "x".repeat(40);
 
@@ -47,5 +48,23 @@ describe("redactArgs", () => {
     expect(out.password).toBe("[hidden]");
     expect(String(out.comment).length).toBeLessThan(310);
     expect(out.student).toBe("peter");
+  });
+});
+
+describe("parseJarvisBody", () => {
+  it("accepts a tool call", () => {
+    expect(parseJarvisBody('{"tool":"get_overview","args":{}}')).toEqual({ ok: true, tool: "get_overview", args: {} });
+    expect(parseJarvisBody('{"tool":" list_students "}')).toEqual({ ok: true, tool: "list_students", args: undefined });
+  });
+  it("rejects bodies that aren't a JSON object with a tool name", () => {
+    for (const raw of ["", "not json", "null", "[1,2]", "42", '{"args":{}}', '{"tool":5}', `{"tool":"${"x".repeat(65)}"}`]) {
+      const r = parseJarvisBody(raw);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.status).toBe(400);
+    }
+  });
+  it("rejects oversized bodies, by header or by actual size", () => {
+    expect(parseJarvisBody("{}", String(MAX_BODY_BYTES + 1))).toMatchObject({ ok: false, status: 413 });
+    expect(parseJarvisBody(`{"tool":"x","args":{"t":"${"a".repeat(MAX_BODY_BYTES)}"}}`)).toMatchObject({ ok: false, status: 413 });
   });
 });
