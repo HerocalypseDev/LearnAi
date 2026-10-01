@@ -27,6 +27,9 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 - Badges for the kids: Lift-off, On the clock, Never late, Quiz master, Superstar, Finisher
 - Settings: late penalty (points per day and cap) and passwords
 - Lively interface: gradient buttons that lift and press, spinners while saving, cards that slide in and lift on hover, letter-bubble quiz answers that pop, drag-and-drop uploads, count-up points, confetti on hand-in and release, and an animated login. Motion turns off for devices set to reduce motion.
+- Hand-in rules: a homework can't be handed in empty (at least one answer or one file), and once it is handed in nothing can be added, changed or removed. Each version's multiple choice adds up to at most 30 points and has at most one short answer question.
+- The deadline of a homework can't be moved once someone has handed it in (their lateness and marks were worked out against it). Change the deadline before then, or delete and recreate the homework.
+- Multiple choice marks always follow the question as it is **now**. If you fix an answer key after the kids answered, open each marked homework and press **Save** again to update its score; saved scores don't change on their own.
 - Scores are hidden until the deadline has passed **and** the admin has released the marking. This is enforced on the server.
 
 ## One-time setup
@@ -37,7 +40,8 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 2. Open **SQL Editor → New query**, paste all of `supabase/schema.sql`, then click **Run**.
 3. Paste all of `supabase/seed.sql` (James, version A, and Peter, version B) into a new query, then click **Run**.
 4. Paste all of `supabase/storage.sql` into a new query, then click **Run**. It creates the private `uploads` storage bucket for homework files.
-5. Go to **Project Settings → API Keys** and copy the **secret** key (it starts with `sb_secret_`). Then find the **Project URL** (`https://xxxx.supabase.co`) under **Project Settings → Data API**.
+5. If your database was created before 2 Oct 2026, also run `supabase/migrations/002_integrity.sql` (safe to run twice). It makes the 10-file limit and "no uploads after hand-in" hold even when two uploads arrive at the same moment. A brand-new project already gets this from `schema.sql`.
+6. Go to **Project Settings → API Keys** and copy the **secret** key (it starts with `sb_secret_`). Then find the **Project URL** (`https://xxxx.supabase.co`) under **Project Settings → Data API**.
 
 ### 2. Vercel (website)
 

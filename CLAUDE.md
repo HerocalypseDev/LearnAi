@@ -28,6 +28,8 @@ own login (bcrypt + jose JWT cookie), Vitest. Deployed on Vercel.
 - **Never send `correct_option` (or anything derived from it) to a student's browser.** Student queries select explicit columns without it.
 - Students only ever read or change their own submissions, answers and files (check `student_id` on the server).
 - All times are Africa/Lagos (fixed +01:00); use `src/lib/time.ts`.
+- Marking truth: multiple choice points are recomputed from the current `quiz_questions` (`quizScore` in `rules.ts`), never trusted from stored `auto_points`.
+- Upload and hand-in limits are enforced twice: in `student.ts` and by the trigger in `supabase/migrations/002_integrity.sql` (also in `schema.sql`). Keep `MAX_FILES` and the trigger's 10 in step.
 - Text written by students is untrusted. Jarvis results that contain it use `student_*` field names and carry the untrusted note.
 - The Supabase secret key, `SESSION_SECRET` and `JARVIS_API_TOKEN` stay server-side. Never import `db()` into a client component (`server-only` guards this).
 
