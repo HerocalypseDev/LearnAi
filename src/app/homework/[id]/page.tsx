@@ -125,32 +125,28 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
           </section>
         )}
 
-        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <h2 className="mb-2 font-semibold">Instructions</h2>
-          {instructions ? (
-            <div className="whitespace-pre-wrap leading-relaxed text-slate-800">{instructions}</div>
-          ) : (
-            <p className="text-sm text-slate-500">No instructions yet.</p>
-          )}
-        </section>
-
         {mcq.length > 0 && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <PartHeading part={1} title="Multiple choice" points={PARTS.mcq} />
+            <PartHeading part={1} title="Quiz" points={PARTS.mcq} />
             <Quiz homeworkId={id} questions={mcq} initial={saved} locked={locked} earned={grade ? earned : undefined} />
           </section>
         )}
 
         {short.length > 0 && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-            <PartHeading part={2} title="Explain it" points={PARTS.short} />
+            <PartHeading part={2} title="Short answer" points={PARTS.short} />
             <Quiz homeworkId={id} questions={short} initial={saved} locked={locked} earned={grade ? earned : undefined} />
           </section>
         )}
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-          <PartHeading part={3} title="Task — upload your work" points={PARTS.task} />
-          <p className="mb-3 text-sm text-slate-600">Do the task in the instructions above, then attach your file here.</p>
+          <PartHeading part={3} title="Task" points={PARTS.task} />
+          {instructions ? (
+            <div className="mb-4 whitespace-pre-wrap rounded-xl bg-indigo-50 p-4 leading-relaxed text-slate-800">{instructions}</div>
+          ) : (
+            <p className="mb-4 text-sm text-slate-500">No task instructions yet.</p>
+          )}
+          <p className="mb-3 text-sm font-medium text-slate-700">When you&apos;ve done the task, upload your work here:</p>
           <Uploads homeworkId={id} uploads={uploadViews} locked={locked} />
         </section>
 

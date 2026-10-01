@@ -71,7 +71,7 @@ export default async function MarkPage({ params }: PageProps<"/admin/homework/[i
         </section>
 
         <section className={cardClass}>
-          <h2 className="mb-2 text-lg font-bold">Files ({uploads.length})</h2>
+          <h2 className="mb-2 text-lg font-bold">Task files ({uploads.length})</h2>
           {uploads.length === 0 ? (
             <p className="text-sm text-slate-500">No files attached.</p>
           ) : (

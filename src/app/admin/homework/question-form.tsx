@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { deleteQuestion, saveQuestion, type FormState } from "@/app/actions/homework-admin";
 import { buttonClass, inputClass, secondaryButtonClass } from "@/components/ui";
+import { PARTS } from "@/lib/rules";
 import type { QuizQuestion } from "@/lib/types";
 import type { VersionNames } from "./homework-form";
 
@@ -20,8 +21,8 @@ export function QuestionForm({
   names: VersionNames;
 }) {
   const [state, action, pending] = useActionState<FormState, FormData>(saveQuestion, {});
-  const [type, setType] = useState(question.type);
-  const [points, setPoints] = useState(String(question.points));
+  // The section decides the type: the Quiz section only adds multiple choice, the Short answer section only short answers.
+  const type = question.type;
   const [options, setOptions] = useState<string[]>(question.options.length ? question.options : ["", "", "", ""]);
   const [correct, setCorrect] = useState<number>(question.correct_option ?? 0);
   const [prompt, setPrompt] = useState(question.prompt);
@@ -32,24 +33,8 @@ export function QuestionForm({
       {question.id && <input type="hidden" name="id" value={question.id} />}
       <input type="hidden" name="homework_id" value={homeworkId} />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <label className="col-span-2 block sm:col-span-1">
-          <span className="text-xs font-medium text-slate-600">Type</span>
-          <select
-            name="type"
-            value={type}
-            onChange={(e) => {
-              const next = e.target.value as Draft["type"];
-              setType(next);
-              // New questions: suggest the usual value for the explanation question.
-              if (!question.id) setPoints(next === "short" ? "10" : String(question.points));
-            }}
-            className={`mt-1 ${inputClass}`}
-          >
-            <option value="mcq">Multiple choice</option>
-            <option value="short">Short explanation</option>
-          </select>
-        </label>
+      <input type="hidden" name="type" value={type} />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <label className="col-span-2 block sm:col-span-1">
           <span className="text-xs font-medium text-slate-600">Who gets it</span>
           <select name="version" defaultValue={question.version} className={`mt-1 ${inputClass}`}>
@@ -58,19 +43,26 @@ export function QuestionForm({
             <option value="B">B only ({names.B})</option>
           </select>
         </label>
-        <label className="block">
-          <span className="text-xs font-medium text-slate-600">Points</span>
-          <input
-            name="points"
-            type="number"
-            min={0}
-            max={40}
-            value={points}
-            onChange={(e) => setPoints(e.target.value)}
-            required
-            className={`mt-1 ${inputClass}`}
-          />
-        </label>
+        {type === "mcq" ? (
+          <label className="block">
+            <span className="text-xs font-medium text-slate-600">Points</span>
+            <input
+              name="points"
+              type="number"
+              min={1}
+              max={PARTS.mcq}
+              defaultValue={question.points}
+              required
+              className={`mt-1 ${inputClass}`}
+            />
+          </label>
+        ) : (
+          <div className="block">
+            <span className="text-xs font-medium text-slate-600">Points</span>
+            <input type="hidden" name="points" value={PARTS.short} />
+            <p className="mt-1 rounded-lg bg-slate-100 px-3 py-2 text-base text-slate-600">{PARTS.short} (fixed)</p>
+          </div>
+        )}
         <label className="block">
           <span className="text-xs font-medium text-slate-600">Order</span>
           <input name="position" type="number" defaultValue={question.position} className={`mt-1 ${inputClass}`} />

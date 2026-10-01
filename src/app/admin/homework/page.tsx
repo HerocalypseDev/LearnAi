@@ -20,9 +20,16 @@ export default async function HomeworkListPage({ searchParams }: PageProps<"/adm
   ]);
   if (error) throw new Error(error.message);
 
-  const ready = (homeworkId: string, version: "A" | "B") => {
-    const t = quizTotals((questions ?? []).filter((q) => q.homework_id === homeworkId && (q.version === version || q.version === "both")));
-    return t.mcq === PARTS.mcq && t.short === PARTS.short;
+  /** What still needs doing before a homework is ready for the kids. */
+  const missing = (h: Homework) => {
+    const out: string[] = [];
+    for (const v of ["A", "B"] as const) {
+      const t = quizTotals((questions ?? []).filter((q) => q.homework_id === h.id && (q.version === v || q.version === "both")));
+      if (t.mcq !== PARTS.mcq) out.push(`quiz ${v} (${t.mcq}/${PARTS.mcq})`);
+      if (t.short !== PARTS.short) out.push(`short answer ${v}`);
+      if (!(v === "A" ? h.instructions_a : h.instructions_b).trim()) out.push(`task instructions ${v}`);
+    }
+    return out;
   };
 
   return (
@@ -42,18 +49,15 @@ export default async function HomeworkListPage({ searchParams }: PageProps<"/adm
         ) : (
           <ul className="space-y-2">
             {(homeworks ?? []).map((h) => {
-              const okA = ready(h.id, "A");
-              const okB = ready(h.id, "B");
+              const todo = missing(h);
               return (
                 <li key={h.id}>
                   <Link href={`/admin/homework/${h.id}`} className={`block ${cardClass} hover:ring-indigo-300`}>
                     <div className="text-xs font-medium text-indigo-600">Week {h.week}</div>
                     <div className="font-semibold">{h.title}</div>
                     <div className="text-sm text-slate-500">Due {formatDateTime(h.due_at)}</div>
-                    <div className={`mt-1 text-xs font-medium ${okA && okB ? "text-emerald-700" : "text-amber-700"}`}>
-                      {okA && okB
-                        ? "Quiz ready for both versions ✓"
-                        : `Quiz not finished: ${[!okA && "version A", !okB && "version B"].filter(Boolean).join(" and ")} need ${PARTS.mcq} multiple choice + ${PARTS.short} explanation points`}
+                    <div className={`mt-1 text-xs font-medium ${todo.length ? "text-amber-700" : "text-emerald-700"}`}>
+                      {todo.length ? `Still to do: ${todo.join(", ")}` : "Quiz, short answer and task ready for both ✓"}
                     </div>
                   </Link>
                 </li>

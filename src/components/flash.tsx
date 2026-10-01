@@ -1,7 +1,7 @@
 // Green confirmation banner shown after an action sends you back to a parent page (?done=...).
 const MESSAGES: Record<string, string> = {
   "handed-in": "🎉 Homework handed in. Well done!",
-  created: "Homework created. Now add the quiz questions below, then click Done.",
+  created: "Homework created. Now fill in the three sections below (Quiz, Short answer, Task), then click Done.",
   saved: "Homework saved.",
   deleted: "Homework deleted.",
   "marks-saved": "Marks saved. Not shown to the child yet.",

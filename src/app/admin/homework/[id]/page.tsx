@@ -15,6 +15,7 @@ import { SubmissionRow } from "@/components/submission-row";
 import { loadSubmissionSummaries } from "@/lib/marking";
 import { HomeworkForm } from "../homework-form";
 import { QuestionForm } from "../question-form";
+import { TaskForm } from "../task-form";
 
 export default async function EditHomeworkPage({ params, searchParams }: PageProps<"/admin/homework/[id]">) {
   await requireUser("admin");
@@ -31,6 +32,8 @@ export default async function EditHomeworkPage({ params, searchParams }: PagePro
   if (!homework) notFound();
 
   const list = questions ?? [];
+  const mcq = list.filter((q) => q.type === "mcq");
+  const short = list.filter((q) => q.type === "short");
   const totals = (v: "A" | "B") => quizTotals(list.filter((q) => q.version === v || q.version === "both"));
   const nextPosition = list.reduce((max, q) => Math.max(max, q.position), 0) + 1;
   const due = toLagosInputs(homework.due_at);
@@ -59,56 +62,85 @@ export default async function EditHomeworkPage({ params, searchParams }: PagePro
         <section className={cardClass}>
           <h1 className="mb-4 text-xl font-bold">{homework.title}</h1>
           <HomeworkForm
-            names={names}
-            values={{
-              id: homework.id,
-              week: homework.week,
-              title: homework.title,
-              due_date: due.date,
-              due_time: due.time,
-              instructions_a: homework.instructions_a,
-              instructions_b: homework.instructions_b,
-            }}
+            values={{ id: homework.id, week: homework.week, title: homework.title, due_date: due.date, due_time: due.time }}
           />
         </section>
 
+        {/* 1. Quiz: multiple choice only */}
         <section className="space-y-3">
-          <div>
-            <h2 className="text-lg font-bold">Quiz questions</h2>
-            <p className="text-sm text-slate-500">
-              Each version needs <b>multiple choice worth {PARTS.mcq}</b> (marked automatically) and a <b>short explanation worth{" "}
-              {PARTS.short}</b> (you mark it). The task ({PARTS.task}) is the file they upload, described in the instructions above.
-            </p>
-            <ul className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
-              {(["A", "B"] as const).map((v) => {
-                const t = totals(v);
-                return (
-                  <li key={v} className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
-                    <div className="font-medium">
-                      {names[v]} ({v})
-                    </div>
-                    Multiple choice <Total value={t.mcq} target={PARTS.mcq} /> · Explanation <Total value={t.short} target={PARTS.short} />
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          {list.map((q, i) => (
+          <SectionHeading
+            n={1}
+            title="Quiz"
+            points={PARTS.mcq}
+            note="Multiple choice, marked automatically. Questions for each version must add up to 30."
+            checks={(["A", "B"] as const).map((v) => ({ label: `${names[v]} (${v})`, value: totals(v).mcq, target: PARTS.mcq }))}
+          />
+          {mcq.map((q, i) => (
             <div key={q.id} className={cardClass}>
-              <div className="mb-2 text-sm font-semibold text-slate-500">Question {i + 1}</div>
+              <div className="mb-2 text-sm font-semibold text-slate-500">Quiz question {i + 1}</div>
               <QuestionForm homeworkId={homework.id} question={q} names={names} />
             </div>
           ))}
-
           <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-white p-5">
-            <div className="mb-2 text-sm font-semibold text-indigo-700">Add a question</div>
+            <div className="mb-2 text-sm font-semibold text-indigo-700">Add a quiz question</div>
             <QuestionForm
-              key={`new-${list.length}`}
+              key={`new-mcq-${mcq.length}`}
               homeworkId={homework.id}
               names={names}
               question={{ type: "mcq", version: "both", prompt: "", options: [], correct_option: 0, points: 3, position: nextPosition }}
             />
+          </div>
+        </section>
+
+        {/* 2. Short answer: fixed 10 points */}
+        <section className="space-y-3">
+          <SectionHeading
+            n={2}
+            title="Short answer"
+            points={PARTS.short}
+            note="A short explanation you mark yourself. Always worth 10 points: add one for both, or one each for A and B."
+            checks={(["A", "B"] as const).map((v) => ({ label: `${names[v]} (${v})`, value: totals(v).short, target: PARTS.short }))}
+          />
+          {short.map((q) => (
+            <div key={q.id} className={cardClass}>
+              <QuestionForm homeworkId={homework.id} question={q} names={names} />
+            </div>
+          ))}
+          {(totals("A").short < PARTS.short || totals("B").short < PARTS.short) && (
+            <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-white p-5">
+              <div className="mb-2 text-sm font-semibold text-indigo-700">Add the short answer question</div>
+              <QuestionForm
+                key={`new-short-${short.length}`}
+                homeworkId={homework.id}
+                names={names}
+                question={{
+                  type: "short",
+                  version: short.length === 0 ? "both" : totals("A").short < PARTS.short ? "A" : "B",
+                  prompt: "",
+                  options: [],
+                  correct_option: null,
+                  points: PARTS.short,
+                  position: nextPosition,
+                }}
+              />
+            </div>
+          )}
+        </section>
+
+        {/* 3. Task: instructions shown to the child above the upload box */}
+        <section className="space-y-3">
+          <SectionHeading
+            n={3}
+            title="Task"
+            points={PARTS.task}
+            note="The kids see these instructions in the Task section, above where they upload their file. You mark it out of 60."
+            checks={[
+              { label: `${names.A} (A)`, value: homework.instructions_a.trim() ? 1 : 0, target: 1, text: homework.instructions_a.trim() ? "written" : "missing" },
+              { label: `${names.B} (B)`, value: homework.instructions_b.trim() ? 1 : 0, target: 1, text: homework.instructions_b.trim() ? "written" : "missing" },
+            ]}
+          />
+          <div className={cardClass}>
+            <TaskForm id={homework.id} a={homework.instructions_a} b={homework.instructions_b} names={names} />
           </div>
         </section>
 
@@ -133,11 +165,39 @@ export default async function EditHomeworkPage({ params, searchParams }: PagePro
   );
 }
 
-function Total({ value, target }: { value: number; target: number }) {
+function SectionHeading({
+  n,
+  title,
+  points,
+  note,
+  checks,
+}: {
+  n: number;
+  title: string;
+  points: number;
+  note: string;
+  checks: { label: string; value: number; target: number; text?: string }[];
+}) {
   return (
-    <span className={value === target ? "font-semibold text-emerald-700" : "font-semibold text-amber-700"}>
-      {value}/{target}
-      {value === target ? " ✓" : ""}
-    </span>
+    <div className="space-y-2 pt-2">
+      <h2 className="flex items-baseline justify-between gap-3 text-lg font-bold">
+        <span>
+          <span className="mr-2 rounded-md bg-indigo-100 px-1.5 py-0.5 text-sm font-bold text-indigo-700">{n}</span>
+          {title}
+        </span>
+        <span className="text-sm font-semibold text-slate-500">{points} points</span>
+      </h2>
+      <p className="text-sm text-slate-500">{note}</p>
+      <ul className="flex flex-wrap gap-2 text-xs">
+        {checks.map((c) => {
+          const ok = c.value === c.target;
+          return (
+            <li key={c.label} className={`rounded-full px-2.5 py-1 font-medium ${ok ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>
+              {c.label}: {c.text ?? `${c.value}/${c.target}`} {ok ? "✓" : ""}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

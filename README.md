@@ -12,12 +12,12 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 - Database schema (`supabase/schema.sql`) and seed data for the admin and the two students (`supabase/seed.sql`)
 - Login with lockout after 10 wrong tries in 15 minutes, plus logout
 - Student dashboard with points, course progress for weeks 1–4, homework due next (live countdown), missed work and handed-in work
-- Homework page showing the child's own version (A or B) of the instructions, and the result once it is visible
+- Homework page showing the child's own version (A or B), with the task instructions inside the Task section, and the result once it is visible
 - Quiz (multiple choice and short answer) that saves as the child types. Multiple choice is marked automatically, and correct answers never reach the browser.
 - File uploads that go straight from the browser to private Supabase storage, with progress bars and previews for images and PDFs. Program files (.exe, .apk, .bat, .msi, .sh, .js and similar) are blocked, files are limited to 20MB each, and each homework takes at most 10 files.
 - One final "Hand in" that locks the work and records how many days late it is
-- Every homework has three parts: **Part 1** multiple choice worth 30 (marked automatically), **Part 2** a short explanation worth 10 (you mark it), and **Part 3** the task worth 60, which is the file they upload
-- Admin homework builder: title, week, due date and time (Lagos), A and B instructions, and quiz questions per version, with a check that each version has 30 points of multiple choice and 10 of explanation
+- Every homework has three sections: **1. Quiz** (multiple choice worth 30, marked automatically), **2. Short answer** (always 10 points, you mark it) and **3. Task** (60 points: your A/B instructions, then the file upload)
+- Admin homework builder: title, week and due date/time (Lagos), then the three sections. Each shows a ✓ when it's complete for both versions, and the homework list says what's still to do.
 - After an action you go back to the page above it: handing in goes to the dashboard; creating a homework goes to its page so you can add questions; **Done**, **Save changes**, marking and deleting go back to the list or the homework, with a green confirmation
 - Marking: each homework's admin page lists James's and Peter's status. The marking page shows their answers (multiple choice auto-marked, with time spent per question), their files with previews, points boxes for short answers and the task, the late penalty applied automatically, and a comment. **Save** keeps it hidden, **Save & release** shows it to the child once the deadline has passed. The Overview lists everything waiting to be marked.
 - Overview: both children side by side (points, average, on-time rate, missing work, attendance, last login, badges), with charts of score per homework and time spent on the quiz

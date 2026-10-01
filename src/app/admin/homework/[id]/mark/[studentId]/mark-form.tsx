@@ -77,7 +77,7 @@ export function MarkForm({
           return (
             <div key={type} className="space-y-3">
               <h2 className="flex items-baseline justify-between text-lg font-bold">
-                {type === "mcq" ? "Part 1 · Multiple choice" : "Part 2 · Explanation"}
+                {type === "mcq" ? "1 · Quiz" : "2 · Short answer"}
                 <span className="text-sm font-semibold text-slate-600">
                   {subtotal}/{max}
                 </span>
@@ -152,7 +152,7 @@ export function MarkForm({
       </section>
 
       <section className="space-y-3 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-        <h2 className="text-lg font-bold">Part 3 · Task (uploaded file) &amp; comment</h2>
+        <h2 className="text-lg font-bold">3 · Task (their uploaded file, above) &amp; comment</h2>
         <label className="flex items-center gap-2 text-sm font-medium">
           Task points
           <input

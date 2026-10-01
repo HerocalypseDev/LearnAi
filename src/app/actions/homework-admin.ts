@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
+import { PARTS } from "@/lib/rules";
 import { fromLagosInputs } from "@/lib/time";
 
 export interface FormState {
@@ -28,8 +29,6 @@ export async function saveHomework(_prev: FormState, formData: FormData): Promis
     week,
     title,
     due_at: dueAt.toISOString(),
-    instructions_a: text(formData, "instructions_a"),
-    instructions_b: text(formData, "instructions_b"),
   };
 
   if (id) {
@@ -44,6 +43,19 @@ export async function saveHomework(_prev: FormState, formData: FormData): Promis
   if (error) return { error: error.message };
   revalidatePath("/admin/homework");
   redirect(`/admin/homework/${data.id}?done=created`);
+}
+
+export async function saveTaskInstructions(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireUser("admin");
+  const id = text(formData, "id");
+  const { error } = await db()
+    .from("homeworks")
+    .update({ instructions_a: text(formData, "instructions_a"), instructions_b: text(formData, "instructions_b") })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(`/admin/homework/${id}`);
+  revalidatePath("/admin/homework");
+  return { ok: "Task instructions saved." };
 }
 
 export async function deleteHomework(formData: FormData) {
@@ -62,13 +74,14 @@ export async function saveQuestion(_prev: FormState, formData: FormData): Promis
   const type = text(formData, "type");
   const version = text(formData, "version");
   const prompt = text(formData, "prompt");
-  const points = Number(text(formData, "points"));
+  // Short answer questions are always worth the fixed short-answer points.
+  const points = type === "short" ? PARTS.short : Number(text(formData, "points"));
   const position = Number(text(formData, "position") || "0");
 
   if (!prompt) return { error: "Write the question." };
   if (type !== "mcq" && type !== "short") return { error: "Pick a question type." };
   if (!["A", "B", "both"].includes(version)) return { error: "Pick which version gets this question." };
-  if (!Number.isInteger(points) || points < 0 || points > 40) return { error: "Points must be a whole number from 0 to 40." };
+  if (!Number.isInteger(points) || points < 1 || points > PARTS.mcq) return { error: `Points must be a whole number from 1 to ${PARTS.mcq}.` };
 
   const options: string[] = [];
   let correctOption: number | null = null;

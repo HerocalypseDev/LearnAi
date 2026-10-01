@@ -12,11 +12,9 @@ export interface HomeworkFormValues {
   title: string;
   due_date: string;
   due_time: string;
-  instructions_a: string;
-  instructions_b: string;
 }
 
-export function HomeworkForm({ values, names }: { values: HomeworkFormValues; names: VersionNames }) {
+export function HomeworkForm({ values }: { values: HomeworkFormValues }) {
   const [state, action, pending] = useActionState<FormState, FormData>(saveHomework, {});
 
   return (
@@ -48,14 +46,6 @@ export function HomeworkForm({ values, names }: { values: HomeworkFormValues; na
           <input type="time" name="due_time" defaultValue={values.due_time} required className={`mt-1 ${inputClass}`} />
         </label>
       </div>
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Instructions — Version A ({names.A})</span>
-        <textarea name="instructions_a" defaultValue={values.instructions_a} rows={7} className={`mt-1 ${inputClass}`} />
-      </label>
-      <label className="block">
-        <span className="text-sm font-medium text-slate-700">Instructions — Version B ({names.B})</span>
-        <textarea name="instructions_b" defaultValue={values.instructions_b} rows={7} className={`mt-1 ${inputClass}`} />
-      </label>
       <div className="flex items-center gap-3">
         <button disabled={pending} className={buttonClass}>
           {pending ? "Saving…" : values.id ? "Save changes" : "Create homework"}
