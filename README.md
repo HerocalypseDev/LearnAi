@@ -62,7 +62,7 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 
 ## Jarvis (optional): let your AI assistant act as the admin
 
-The app has a private API at `/api/jarvis` that lets Jarvis do everything you can do here, using the same rules as the website: read scores and progress, create and edit homework, mark, release, attendance, settings and CSV exports. Every change Jarvis makes shows in **Activity → 🤖 Jarvis**, and marks it saves are labelled **Marked by Jarvis**.
+The app has a private, token-protected **admin tool API** at `/api/jarvis`. It is not an MCP server itself: Jarvis runs its own small MCP server (see the plan below) that calls this API. Through it Jarvis can do everything you can do here, using the same rules as the website: read scores and progress, create and edit homework, mark, release, attendance, settings and CSV exports. Every change Jarvis makes shows in **Activity → 🤖 Jarvis**, and marks it saves are labelled **Marked by Jarvis**.
 
 1. **Supabase:** paste `supabase/migrations/001_jarvis.sql` into the SQL Editor and click **Run**. It's safe to run twice.
 2. **Vercel → Settings → Environment Variables:** add `JARVIS_API_TOKEN` (a random secret of 32+ characters; for example, run `python -c "import secrets; print(secrets.token_urlsafe(40))"`), then redeploy.

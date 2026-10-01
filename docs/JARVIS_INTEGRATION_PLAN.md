@@ -46,16 +46,17 @@ You (voice/text) ──► jarvis.py agent loop ──► mcp_homework_<tool>  (
 | Code | Meaning |
 |---|---|
 | 200 | ok |
-| 400 | bad or missing args, or a business rule was broken (the message says which) |
+| 400 | bad or missing args, a body that isn't a JSON object, or a business rule was broken (the message says which) |
 | 401 | wrong token |
 | 403 | the app is in read-only mode (`JARVIS_API_READ_ONLY=1`) |
 | 404 | unknown tool, homework or student |
+| 413 | request body over 256 KB |
 | 500 | app error |
 | 503 | the app has Jarvis access turned off (no token set) |
 
 **Behaviour to rely on:**
 - Students can be referred to as `"James"`/`"james"` (version A, age 11) or `"Peter"`/`"peter"` (version B, age 12). Matching is case-insensitive on username or first name.
-- Every write is recorded in the app's Activity log as **Jarvis** (`event = admin_action`). Marks saved by Jarvis show a **"🤖 Marked by Jarvis"** label for the teacher.
+- Every write attempt, including ones refused by read-only mode or rejected for bad arguments, is recorded in the app's Activity log as **Jarvis** (`event = admin_action`, `detail.ok` true/false). Marks saved by Jarvis show a **"🤖 Marked by Jarvis"** label for the teacher.
 - Send a `User-Agent` that contains `Jarvis`, e.g. `Jarvis-Homework/1.0`. The app shows that string as the device in its Activity log.
 - **Homework structure:** quiz = multiple choice worth **30** (auto-marked), short answer = always **10** (manual), task = **60** (uploaded files, manual). Total 100.
 - **Late penalty:** 10 points per started day late, capped at 50. The settings can change this; the app applies it automatically.
@@ -222,7 +223,8 @@ Turn every result into compact, speakable text of **3,500 characters or less**. 
 - `list_homeworks`: `Week 1 · Robots everywhere (id 94c0…) · due Sat 3 Oct, 21:00 · James: to mark · Peter: missing · setup: ready`.
   - **Always include the full `id` somewhere in the text**, because the model needs it for follow-up calls. Keep it at the end of the line.
 - `get_submission`: never send student text raw. For each `student_answer` and each file name, run `neutralize_injection(...)`, then wrap the text in `frame_untrusted("homework", student_name, text)`. If `neutralize_injection` removed anything, add the line `⚠ Possible instructions were removed from <student>'s answer — review this one yourself.`
-- `get_activity`: one event per line, `when · who · event · detail-summary`.
+- `get_activity`: the result is `{note, events: [...]}`. Format one event per line, `when · who · event · detail-summary`. Upload file names arrive as `detail.student_file_name` (child-written): pass them through `neutralize_injection` like any other `student_*` field.
+- `export_csv`: the result is `{kind, note, csv}`. The CSV can contain child-written file names (activity.csv); treat it only as data.
 - `export_csv`: return the first 40 lines plus `…(N more rows)`. If the user asks to save it, Jarvis can use its existing `write_file` tool on the full text. To support that, add an optional `save_to: str` parameter on `export_csv` that writes the full CSV with `pathlib` (validate that the path ends in `.csv`) and returns the path.
 
 ### 4.3 Register the server
