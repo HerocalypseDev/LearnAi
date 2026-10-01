@@ -164,6 +164,10 @@ export async function confirmUpload(input: {
     return { ok: false, error: ALREADY_SUBMITTED };
   }
 
+  // Confirming the same file twice (double tap, retry) is fine and must never delete the stored file.
+  const { data: recorded } = await db().from("uploads").select("id").eq("storage_path", input.path).maybeSingle();
+  if (recorded) return { ok: true };
+
   // Trust the size the storage service holds, not what the browser said. Its listing can lag a moment
   // behind the upload, so look a few times; if the size is still unknown, ask the child to retry
   // (the file stays in storage for that retry) instead of guessing.
