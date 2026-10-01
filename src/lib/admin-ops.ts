@@ -4,7 +4,7 @@ import { db } from "./db";
 import { loadMarking } from "./marking";
 import { autoPoints, clampPoints, computeGrade, PARTS, passwordProblem } from "./rules";
 import { fromLagosInputs, toLagosInputs } from "./time";
-import type { Homework, QuizQuestion, Role, User } from "./types";
+import type { Homework, QuizQuestion, User } from "./types";
 
 // Every admin change lives here, so the website (server actions) and Jarvis (the API in
 // app/api/jarvis) follow exactly the same rules. Callers check who is allowed first.
@@ -343,12 +343,16 @@ export async function updateSettings(perDayRaw: unknown, capRaw: unknown) {
 export async function setUserPassword(userId: unknown, password: unknown) {
   const id = assertId(userId, "User");
   const pw = String(password ?? "");
-  const { data: target } = await db().from("users").select("id, full_name, role").eq("id", id).maybeSingle();
+  const { data: target } = await db()
+    .from("users")
+    .select("id, full_name, role")
+    .eq("id", id)
+    .maybeSingle<Pick<User, "id" | "full_name" | "role">>();
   if (!target) throw new OpError("User not found.", 404);
-  const problem = passwordProblem(pw, target.role as Role);
+  const problem = passwordProblem(pw, target.role);
   if (problem) throw new OpError(problem);
   const passwordHash = await bcrypt.hash(pw, 12);
   const { error } = await db().from("users").update({ password_hash: passwordHash }).eq("id", id);
   if (error) throw new OpError("Could not save the password. Try again.", 500);
-  return { id: target.id as string, full_name: target.full_name as string, role: target.role as string, password_hash: passwordHash };
+  return { id: target.id, full_name: target.full_name, role: target.role, password_hash: passwordHash };
 }

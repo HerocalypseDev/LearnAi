@@ -67,13 +67,14 @@ export async function loadStats(): Promise<StatsResult> {
         dueSoFar++;
         if (!submitted) missing++;
       }
-      if (submitted && sub!.days_late > 0) late++;
-      else if (submitted) onTime++;
+      const handedIn = submitted ? sub : undefined;
+      if (handedIn && handedIn.days_late > 0) late++;
+      else if (handedIn) onTime++;
       if (grade) marked.push(grade.final_points);
       if (visible) points += grade.final_points;
       badgeInput.push({
         dueAt: hw.due_at,
-        submittedAt: submitted ? sub!.submitted_at : null,
+        submittedAt: handedIn ? handedIn.submitted_at : null,
         daysLate: sub?.days_late ?? 0,
         grade: visible ? grade : null,
         quizMax: hw.quiz_points,
