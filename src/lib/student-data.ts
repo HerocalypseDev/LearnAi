@@ -11,8 +11,11 @@ export interface StudentHomework {
   status: HomeworkStatus;
 }
 
+/** Homework columns a student's pages may use: never the teacher's marking notes. */
+export const STUDENT_HOMEWORK_COLUMNS = "id, week, title, due_at, instructions_a, instructions_b, max_points, quiz_points, task_points";
+
 export async function loadStudentHomework(studentId: string, homeworkId?: string): Promise<StudentHomework[]> {
-  let hwQuery = db().from("homeworks").select("*").order("due_at");
+  let hwQuery = db().from("homeworks").select(STUDENT_HOMEWORK_COLUMNS).order("due_at");
   if (homeworkId) hwQuery = hwQuery.eq("id", homeworkId);
 
   const [{ data: homeworks, error: hwError }, { data: submissions, error: subError }] = await Promise.all([
