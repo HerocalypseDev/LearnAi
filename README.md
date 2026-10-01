@@ -83,6 +83,6 @@ npm test                     # rule tests: late penalty, score visibility, statu
 
 ## Rules (`src/lib/rules.ts`)
 
-- 100 points per homework: quiz 40 + task 60.
+- 100 points per homework: multiple choice 30 + short answer 10 (together the quiz, 40) + task 60. The single source in code is `PARTS` in `src/lib/rules.ts`.
 - Late work is accepted but loses 10 points per started day after the deadline, up to 50. The per-day amount and the cap live in the `settings` table.
 - Submitting at 21:01 on the due day counts as 1 day late.

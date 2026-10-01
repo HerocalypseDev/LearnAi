@@ -155,14 +155,21 @@ export async function confirmUpload(input: {
   // Trust the size Supabase stored, not what the browser said.
   const { data: listed } = await bucket().list(folder, { search: objectName, limit: 10 });
   const object = listed?.find((o) => o.name === objectName);
-  const size = Number(object?.metadata?.size ?? 0);
   if (!object) return { ok: false, error: "The upload didn't arrive. Try again." };
+  // metadata.size is normally present; if Supabase ever omits it, don't block the upload over it.
+  const reported = object.metadata?.size;
+  const size = reported === undefined || reported === null ? null : Number(reported);
 
   const { count } = await db()
     .from("uploads")
     .select("id", { count: "exact", head: true })
     .eq("submission_id", submission.id);
-  const problem = checkUpload(input.fileName, size || 1, count ?? 0) ?? (size > MAX_FILE_BYTES ? "File is bigger than 20MB." : null);
+  // Check both the name the browser reports and the name actually stored (they share the extension).
+  const checkedSize = size ?? 1;
+  const problem =
+    checkUpload(input.fileName, checkedSize, count ?? 0) ??
+    checkUpload(objectName, checkedSize, count ?? 0) ??
+    (size !== null && size > MAX_FILE_BYTES ? "File is bigger than 20MB." : null);
   if (problem) {
     await bucket().remove([input.path]);
     return { ok: false, error: problem };
@@ -172,7 +179,7 @@ export async function confirmUpload(input: {
     submission_id: submission.id,
     file_name: input.fileName.slice(0, 200),
     file_type: input.fileType.slice(0, 100) || null,
-    size_bytes: size,
+    size_bytes: size ?? 0,
     storage_path: input.path,
   });
   if (error) return { ok: false, error: "Couldn't save the upload. Try again." };

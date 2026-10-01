@@ -133,7 +133,7 @@ export default async function EditHomeworkPage({ params, searchParams }: PagePro
             n={3}
             title="Task"
             points={PARTS.task}
-            note="The kids see these instructions in the Task section, above where they upload their file. You mark it out of 60."
+            note={`The kids see these instructions in the Task section, above where they upload their file. You mark it out of ${PARTS.task}.`}
             checks={[
               { label: `${names.A} (A)`, value: homework.instructions_a.trim() ? 1 : 0, target: 1, text: homework.instructions_a.trim() ? "written" : "missing" },
               { label: `${names.B} (B)`, value: homework.instructions_b.trim() ? 1 : 0, target: 1, text: homework.instructions_b.trim() ? "written" : "missing" },

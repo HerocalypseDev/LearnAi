@@ -367,7 +367,7 @@ export const TOOLS: JarvisTool[] = [
   {
     name: "create_homework",
     description:
-      "Create a homework. Deadlines are 21:00 Lagos time unless told otherwise. After creating it, add 30 points of quiz questions (add_question type mcq) and one short answer (type short, always 10 points), and make sure both versions have task instructions.",
+      `Create a homework. Deadlines are 21:00 Lagos time unless told otherwise. After creating it, add ${PARTS.mcq} points of quiz questions (add_question type mcq) and one short answer (type short, always ${PARTS.short} points), and make sure both versions have task instructions.`,
     input_schema: obj(
       {
         title: { type: "string" },
@@ -420,7 +420,7 @@ export const TOOLS: JarvisTool[] = [
   {
     name: "add_question",
     description:
-      'Add a question. type "mcq" = quiz multiple choice (marked automatically; each version\'s quiz must total 30 points). type "short" = the short answer (always 10 points, one per version). version "both", "A" (James) or "B" (Peter).',
+      `Add a question. type "mcq" = quiz multiple choice (marked automatically; each version's quiz must total ${PARTS.mcq} points). type "short" = the short answer (always ${PARTS.short} points, one per version). version "both", "A" (James) or "B" (Peter).`,
     input_schema: obj(
       {
         homework_id: HOMEWORK_ID,
@@ -429,7 +429,7 @@ export const TOOLS: JarvisTool[] = [
         prompt: { type: "string" },
         options: { type: "array", items: { type: "string" }, description: "mcq only: 2 to 6 options" },
         correct_option: { type: "integer", description: "mcq only: index of the correct option, counting from 0" },
-        points: { type: "integer", description: "mcq only: 1 to 30 (short answers are always 10)" },
+        points: { type: "integer", description: `mcq only: 1 to ${PARTS.mcq} (short answers are always ${PARTS.short})` },
         position: { type: "integer", description: "Order on the page (default: last)" },
       },
       ["homework_id", "type", "prompt"],
@@ -465,13 +465,13 @@ export const TOOLS: JarvisTool[] = [
   {
     name: "save_marks",
     description:
-      'Save marks for one handed-in homework: points for each short answer (by question_id, out of 10), task points (out of 60) and a kind, specific comment for the child. Multiple choice and the late penalty are worked out automatically. release: "keep" (default, leaves it as it is), "release" (the child sees it once the deadline has passed) or "hide". Fields you leave out keep their current value. Returns the final score.',
+      `Save marks for one handed-in homework: points for each short answer (by question_id, out of ${PARTS.short}), task points (out of ${PARTS.task}) and a kind, specific comment for the child. Multiple choice and the late penalty are worked out automatically. release: "keep" (default, leaves it as it is), "release" (the child sees it once the deadline has passed) or "hide". Fields you leave out keep their current value. Returns the final score.`,
     input_schema: obj(
       {
         homework_id: HOMEWORK_ID,
         student: STUDENT,
         short_answer_points: { type: "object", additionalProperties: { type: "integer" }, description: '{"<question_id>": points}' },
-        task_points: { type: "integer", description: "0 to 60" },
+        task_points: { type: "integer", description: `0 to ${PARTS.task}` },
         comment: { type: "string", description: "Feedback the child will see" },
         release: { type: "string", enum: ["keep", "release", "hide"] },
       },

@@ -1,6 +1,7 @@
 import "server-only";
 import { toCsv } from "./csv";
 import { db } from "./db";
+import { PARTS } from "./rules";
 import { loadStats } from "./stats";
 import { TIME_ZONE } from "./time";
 import type { Attendance, Grade, Homework, Submission, User } from "./types";
@@ -40,7 +41,7 @@ export async function buildCsv(kind: string): Promise<string | null> {
       rows.push([st.student.full_name, st.student.version, "", "TOTAL (released)", "", "", "", "", "", "", "", st.points, "", st.badges.map((b) => b.name).join("; ")]);
     }
     csv = toCsv(
-      ["Student", "Version", "Week", "Homework", "Due", "Status", "Handed in", "Days late", "Quiz /40", "Task /60", "Late penalty", "Final /100", "Released", "Comment / badges"],
+      ["Student", "Version", "Week", "Homework", "Due", "Status", "Handed in", "Days late", `Quiz /${PARTS.mcq + PARTS.short}`, `Task /${PARTS.task}`, "Late penalty", "Final /100", "Released", "Comment / badges"],
       rows,
     );
   } else if (kind === "activity.csv") {

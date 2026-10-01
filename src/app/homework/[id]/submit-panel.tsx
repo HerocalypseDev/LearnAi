@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { submitHomework } from "@/app/actions/student";
 import { Spinner } from "@/components/spinner";
 import { bigGoButtonClass } from "@/components/ui";
-import { daysLate, latePenalty } from "@/lib/rules";
+import { daysLate, latePenalty, PARTS } from "@/lib/rules";
 
 export function SubmitPanel({
   homeworkId,
@@ -28,7 +28,7 @@ export function SubmitPanel({
     const late = daysLate(new Date(dueAt), new Date());
     const lines = ["Hand in this homework? You can't change it afterwards."];
     if (unanswered > 0) lines.push(`\nYou haven't answered ${unanswered} question${unanswered === 1 ? "" : "s"}.`);
-    if (fileCount === 0) lines.push("\nYou haven't uploaded your task file. The task is worth 60 points!");
+    if (fileCount === 0) lines.push(`\nYou haven't uploaded your task file. The task is worth ${PARTS.task} points!`);
     if (late > 0) lines.push(`\nIt's ${late} day${late === 1 ? "" : "s"} late: you'll lose ${latePenalty(late, penalty.perDay, penalty.cap)} points.`);
     if (!confirm(lines.join(""))) return;
 
