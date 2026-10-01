@@ -130,3 +130,9 @@ alter table grades         enable row level security;
 alter table attendance     enable row level security;
 alter table activity_log   enable row level security;
 alter table settings       enable row level security;
+
+-- The app's server connects with the secret (service_role) key. Grant it access
+-- explicitly in case the project doesn't expose new tables automatically.
+grant usage on schema public to service_role;
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;

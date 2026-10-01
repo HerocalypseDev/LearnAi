@@ -22,8 +22,18 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
 
   if (!username || !password) return fail("Type your username and password.");
 
-  const { data: user } = await db().from("users").select("*").eq("username", username).maybeSingle<User>();
-  if (!user) return fail();
+  let user: User | null;
+  try {
+    const { data, error } = await db().from("users").select("*").eq("username", username).maybeSingle<User>();
+    if (error) throw new Error(error.message);
+    user = data;
+  } catch (e) {
+    console.error("login: database error", e);
+    return fail(`Setup: the app can't reach the database (${e instanceof Error ? e.message : String(e)}). Check SUPABASE_URL and SUPABASE_SECRET_KEY in Vercel.`);
+  }
+  if (!user) {
+    return fail(username === "admin" ? "Setup: there is no admin user in the database yet. Run supabase/seed.sql in Supabase." : undefined);
+  }
 
   const since = new Date(Date.now() - LOCKOUT_MINUTES * 60_000).toISOString();
   const { count } = await db()
@@ -37,22 +47,30 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
   }
 
   let passwordHash = user.password_hash;
+  let justSetUp = false;
 
   // First-time admin setup: until the admin has a stored password, the
   // ADMIN_PASSWORD environment variable is accepted and saved (hashed).
+  // These setup messages only show until the admin password is first saved.
   if (!passwordHash && user.role === "admin") {
-    const initial = process.env.ADMIN_PASSWORD;
-    if (initial && password === initial) {
-      passwordHash = await bcrypt.hash(password, 12);
-      await db().from("users").update({ password_hash: passwordHash }).eq("id", user.id);
+    const initial = process.env.ADMIN_PASSWORD?.trim();
+    if (!initial) {
+      return fail("Setup: ADMIN_PASSWORD is not set in Vercel, or the site hasn't been redeployed since it was added.");
     }
+    if (password.trim() !== initial) {
+      return fail("Setup: that isn't the ADMIN_PASSWORD saved in Vercel. Check it for typos or extra spaces.");
+    }
+    passwordHash = await bcrypt.hash(initial, 12);
+    const { error } = await db().from("users").update({ password_hash: passwordHash }).eq("id", user.id);
+    if (error) return fail(`Setup: couldn't save the admin password: ${error.message}`);
+    justSetUp = true;
   }
 
   if (!passwordHash) {
-    return fail(user.role === "student" ? "Your password hasn't been set yet. Ask your teacher." : undefined);
+    return fail("Your password hasn't been set yet. Ask your teacher.");
   }
 
-  if (!(await bcrypt.compare(password, passwordHash))) {
+  if (!justSetUp && !(await bcrypt.compare(password, passwordHash))) {
     await logActivity(user.id, "login_failed");
     return fail();
   }
