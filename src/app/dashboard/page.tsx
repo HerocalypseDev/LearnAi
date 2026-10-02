@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Countdown } from "@/components/countdown";
+import { CourseOutline } from "@/components/course-outline";
 import { CountUp } from "@/components/count-up";
 import { Flash } from "@/components/flash";
 import { cardClass, linkCardClass } from "@/components/ui";
@@ -59,6 +60,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/dashbo
         </section>
 
         <CourseProgress items={items} />
+
+        <CourseOutline />
 
         <section className={cardClass}>
           <h2 className="mb-2 font-semibold">Badges {badges.length > 0 && <span className="text-slate-400">· {badges.length}</span>}</h2>
