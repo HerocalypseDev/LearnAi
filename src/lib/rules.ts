@@ -15,6 +15,14 @@ export function latePenalty(days: number, perDay = DEFAULT_PENALTY.perDay, cap =
   return Math.min(Math.max(days, 0) * perDay, cap);
 }
 
+/**
+ * Lateness after the quiz is handed in: adding a task file later counts as late too, measured from the
+ * moment of that upload. It only ever goes up (removing a file doesn't make work less late).
+ */
+export function lateDaysAfterUpload(currentDaysLate: number, dueAt: Date, uploadedAt: Date): number {
+  return Math.max(currentDaysLate, daysLate(dueAt, uploadedAt));
+}
+
 /** Final score never drops below zero. */
 export function finalPoints(quiz: number, task: number, penalty: number): number {
   return Math.max(quiz + task - penalty, 0);

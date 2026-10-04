@@ -85,17 +85,16 @@ create table if not exists uploads (
 -- One row per stored file (a double "confirm" can't list the same file twice).
 create unique index if not exists uploads_storage_path_key on uploads (storage_path);
 
--- Serialises uploads per submission: locks the submission row, then refuses the new file if the
--- homework was handed in or already has 10 files. Keep 10 in step with MAX_FILES in src/lib/rules.ts.
+-- Serialises uploads per submission: locks the submission row, then refuses the new file if the result
+-- was released (task files stay editable after hand-in until then) or it already has 10 files. Keep 10 in step with MAX_FILES in src/lib/rules.ts.
 create or replace function enforce_upload_rules() returns trigger
 language plpgsql as $$
 declare
-  current_status text;
   file_count int;
 begin
-  select status into current_status from submissions where id = new.submission_id for update;
-  if current_status is distinct from 'draft' then
-    raise exception 'already_submitted';
+  perform 1 from submissions where id = new.submission_id for update;
+  if exists (select 1 from grades where submission_id = new.submission_id and released_at is not null) then
+    raise exception 'task_locked';
   end if;
   select count(*) into file_count from uploads where submission_id = new.submission_id;
   if file_count >= 10 then

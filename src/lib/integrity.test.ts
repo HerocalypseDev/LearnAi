@@ -5,6 +5,7 @@ import {
   checkStoredUpload,
   fileExtension,
   hasHandInContent,
+  lateDaysAfterUpload,
   MAX_FILE_BYTES,
   MAX_FILES,
   normalizeMcq,
@@ -111,5 +112,19 @@ describe("csvFileName", () => {
     expect(csvFileName('x"; evil=1\r\n')).toBe("x_evil_1_.csv");
     expect(csvFileName("../../etc/passwd")).toBe("_etc_passwd.csv");
     expect(csvFileName("")).toBe("export.csv");
+  });
+});
+
+describe("lateDaysAfterUpload (task files added after hand-in)", () => {
+  const due = new Date("2026-10-07T20:00:00Z");
+  it("an upload before the deadline changes nothing", () => {
+    expect(lateDaysAfterUpload(0, due, new Date("2026-10-07T19:59:59Z"))).toBe(0);
+  });
+  it("an upload after the deadline counts as started days late, even if the quiz was on time", () => {
+    expect(lateDaysAfterUpload(0, due, new Date("2026-10-07T20:00:01Z"))).toBe(1);
+    expect(lateDaysAfterUpload(0, due, new Date("2026-10-09T10:00:00Z"))).toBe(2);
+  });
+  it("never lowers lateness already recorded", () => {
+    expect(lateDaysAfterUpload(3, due, new Date("2026-10-07T20:00:01Z"))).toBe(3);
   });
 });

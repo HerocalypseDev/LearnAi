@@ -2,7 +2,7 @@ import { Confetti } from "./confetti";
 
 // Banner shown after an action sends you back to a parent page (?done=...).
 const MESSAGES: Record<string, { text: string; party?: boolean }> = {
-  "handed-in": { text: "🎉 Homework handed in. Well done!", party: true },
+  "handed-in": { text: "🎉 Quiz and short answer handed in. Add your task files whenever they're ready.", party: true },
   created: { text: "✨ Homework created. Now fill in the three sections below (Quiz, Short answer, Task), then click Done." },
   saved: { text: "✅ Homework saved." },
   deleted: { text: "🗑️ Homework deleted." },

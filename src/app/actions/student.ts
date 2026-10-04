@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
-import { autoPoints, checkStoredUpload, checkUpload, daysLate, hasHandInContent, MAX_FILES } from "@/lib/rules";
+import { autoPoints, checkStoredUpload, checkUpload, daysLate, hasHandInContent, lateDaysAfterUpload, MAX_FILES } from "@/lib/rules";
 import { requireUser } from "@/lib/session";
 import { bucket, safeFileName, uploadFolder } from "@/lib/storage";
 import type { Homework, QuizQuestion, Submission, User } from "@/lib/types";
@@ -50,7 +50,17 @@ async function getOrCreateSubmission(student: User, homeworkId: string): Promise
   return winner;
 }
 
-const ALREADY_SUBMITTED = "This homework has already been handed in, so it can't be changed.";
+const ALREADY_SUBMITTED = "Your quiz has already been handed in, so the answers can't be changed.";
+const TASK_LOCKED = "Your teacher has released your result, so task files can't be changed any more.";
+
+/**
+ * Quiz and short answers lock at hand-in, but task files stay open (they take time) until the teacher
+ * releases the result. The database trigger enforces the same rule for parallel requests.
+ */
+async function taskLocked(submissionId: string): Promise<boolean> {
+  const { data } = await db().from("grades").select("released_at").eq("submission_id", submissionId).maybeSingle<{ released_at: string | null }>();
+  return !!data?.released_at;
+}
 
 export async function saveAnswer(input: {
   homeworkId: string;
@@ -124,7 +134,7 @@ export async function requestUpload(input: {
   if (!homework) return { ok: false, error: "Homework not found." };
 
   const submission = await getOrCreateSubmission(student, homework.id);
-  if (submission.status === "submitted") return { ok: false, error: ALREADY_SUBMITTED };
+  if (await taskLocked(submission.id)) return { ok: false, error: TASK_LOCKED };
 
   const { count } = await db()
     .from("uploads")
@@ -159,9 +169,9 @@ export async function confirmUpload(input: {
   }
 
   const submission = await getOrCreateSubmission(student, homework.id);
-  if (submission.status === "submitted") {
+  if (await taskLocked(submission.id)) {
     await bucket().remove([input.path]);
-    return { ok: false, error: ALREADY_SUBMITTED };
+    return { ok: false, error: TASK_LOCKED };
   }
 
   // Confirming the same file twice (double tap, retry) is fine and must never delete the stored file.
@@ -206,10 +216,23 @@ export async function confirmUpload(input: {
   if (error) {
     if (error.code === "23505") return { ok: true }; // this exact file was already recorded (double confirm)
     await bucket().remove([input.path]); // never leave a stored file that has no row
-    if (/already_submitted/.test(error.message)) return { ok: false, error: ALREADY_SUBMITTED };
+    if (/task_locked/.test(error.message)) return { ok: false, error: TASK_LOCKED };
+    if (/already_submitted/.test(error.message)) {
+      // The older upload trigger (002) is still installed: the teacher needs to run migration 003.
+      console.error("confirmUpload: database still on migration 002; run supabase/migrations/003_task_after_handin.sql");
+      return { ok: false, error: "Adding files after hand-in isn't switched on yet. Tell your teacher." };
+    }
     if (/upload_limit/.test(error.message)) return { ok: false, error: `You can attach up to ${MAX_FILES} files.` };
     console.error("confirmUpload insert failed", error.message);
     return { ok: false, error: "Couldn't save the upload. Try again." };
+  }
+
+  // A file added after hand-in counts as late too if it arrives after the deadline (never reduces lateness).
+  if (submission.status === "submitted") {
+    const days = lateDaysAfterUpload(submission.days_late, new Date(homework.due_at), new Date());
+    if (days > submission.days_late) {
+      await db().from("submissions").update({ days_late: days }).eq("id", submission.id).eq("status", "submitted");
+    }
   }
 
   await logActivity(student.id, "upload", { homework_id: homework.id, file_name: input.fileName, size_bytes: storedSize });
@@ -232,7 +255,7 @@ export async function removeUpload(uploadId: string): Promise<Result> {
       submissions: Pick<Submission, "id" | "student_id" | "status" | "homework_id">;
     }>();
   if (!upload || upload.submissions.student_id !== student.id) return { ok: false, error: "File not found." };
-  if (upload.submissions.status === "submitted") return { ok: false, error: ALREADY_SUBMITTED };
+  if (await taskLocked(upload.submissions.id)) return { ok: false, error: TASK_LOCKED };
 
   // Row first: if the file can't be deleted from storage afterwards it is just an unreferenced leftover,
   // whereas the other order could leave a listed file whose content is gone.

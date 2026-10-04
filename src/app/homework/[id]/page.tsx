@@ -24,7 +24,7 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
   if (!item) notFound();
   const { homework, status, grade, submission } = item;
 
-  const [{ data: questions }, { data: answers }, { data: uploads }, { data: settings }] = await Promise.all([
+  const [{ data: questions }, { data: answers }, { data: uploads }, { data: settings }, { data: released }] = await Promise.all([
     db()
       .from("quiz_questions")
       // Never select correct_option here: this goes to the browser.
@@ -41,6 +41,10 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
       ? db().from("uploads").select("*").eq("submission_id", submission.id).order("uploaded_at").returns<Upload[]>()
       : Promise.resolve({ data: [] as Upload[] }),
     db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>(),
+    // Only whether the result was released (task files lock then), never the marks themselves.
+    submission
+      ? db().from("grades").select("released_at").eq("submission_id", submission.id).maybeSingle<{ released_at: string | null }>()
+      : Promise.resolve({ data: null }),
     logActivity(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id }),
   ]);
 
@@ -66,7 +70,9 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
     return !a || (q.type === "mcq" ? a.selected_option === null : !a.answer_text?.trim());
   }).length;
 
+  // Quiz and short answer lock at hand-in; task files stay open until the teacher releases the result.
   const locked = submission?.status === "submitted";
+  const taskLocked = !!released?.released_at;
   const instructions = student.version === "B" ? homework.instructions_b : homework.instructions_a;
   const isOpen = status === "upcoming" || status === "in_progress";
 
@@ -147,14 +153,26 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
             <p className="mb-4 text-sm text-slate-500">No task instructions yet.</p>
           )}
           <p className="mb-3 text-sm font-medium text-slate-700">When you&apos;ve done the task, upload your work here:</p>
-          <Uploads homeworkId={id} uploads={uploadViews} locked={locked} />
+          {locked && !taskLocked && (
+            <p className="mb-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 ring-1 ring-emerald-200">
+              Your quiz is handed in, but you can still add or change your task files here until your teacher releases your result.
+              {submission && submission.days_late > 0 && " Files added after the deadline count as late."}
+            </p>
+          )}
+          <Uploads homeworkId={id} uploads={uploadViews} locked={taskLocked} />
         </section>
 
         {locked ? (
           <section className="animate-pop rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 p-5 text-center shadow-sm ring-1 ring-emerald-200">
-            <p className="font-semibold text-emerald-800">✅ Handed in</p>
+            <p className="font-semibold text-emerald-800">✅ Quiz and short answer handed in</p>
             <p className="mt-1 text-sm text-emerald-700">
-              {grade ? "Your result is above." : "Your teacher will mark it after the deadline."}
+              {grade
+                ? "Your result is above."
+                : taskLocked
+                  ? "Your teacher will share your result after the deadline."
+                  : uploadViews.length === 0
+                    ? "Your task isn't uploaded yet. Add your files above when it's ready."
+                    : "Your teacher will mark it after the deadline. You can still change your task files above."}
             </p>
           </section>
         ) : (
