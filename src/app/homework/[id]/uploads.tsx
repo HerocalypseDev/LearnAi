@@ -2,7 +2,9 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { confirmUpload, removeUpload, requestUpload } from "@/app/actions/student";
+import { TaskEditor } from "./text-editor";
+import { saveLocalStorage, loadLocalStorage } from "@/lib/local-storage-client";
+import { confirmUpload, removeUpload, requestUpload as serverRequestUpload } from "@/app/actions/student";
 import { checkUpload, MAX_FILES } from "@/lib/rules";
 
 export interface UploadView {
@@ -66,7 +68,7 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
       count++;
       setProgress((p) => [...p, { name: file.name, percent: 0 }]);
       try {
-        const start = await requestUpload({ homeworkId, fileName: file.name, sizeBytes: file.size });
+        const start = await serverRequestUpload({ homeworkId, fileName: file.name, sizeBytes: file.size });
         if (!start.ok) throw new Error(start.error);
         await sendFile(start.signedUrl, file, (percent) =>
           setProgress((p) => p.map((x) => (x.name === file.name ? { ...x, percent } : x))),

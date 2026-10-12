@@ -1,78 +1,70 @@
+"use client";
+
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Countdown } from "@/components/countdown";
 import { StatusPill } from "@/components/status-pill";
 import { TopBar } from "@/components/top-bar";
-import { logActivity } from "@/lib/activity";
-import { requireUser } from "@/lib/session";
-import { db } from "@/lib/db";
 import { DEFAULT_PENALTY, PARTS } from "@/lib/rules";
-import { signedLinks } from "@/lib/storage";
-import { loadStudentHomework } from "@/lib/student-data";
 import { formatDateTime } from "@/lib/time";
-import type { Answer, Settings, StudentQuestion, Upload } from "@/lib/types";
 import { Quiz, type SavedAnswer } from "./quiz";
 import { SubmitPanel } from "./submit-panel";
-import { Uploads, type UploadView } from "./uploads";
+import { TaskEditor as TextEditor } from "./text-editor";
+import { Uploads } from "./uploads";
+import { loadHomeworkPage, type HomeworkPageData } from "@/app/actions/homework-page";
 
-export default async function HomeworkPage({ params }: PageProps<"/homework/[id]">) {
-  const { id } = await params;
-  const student = await requireUser("student");
-  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+export default function HomeworkPage() {
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
+  const [openTextEditor, setOpenTextEditor] = useState(false);
+  const [data, setData] = useState<HomeworkPageData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const [item] = await loadStudentHomework(student.id, id);
-  if (!item) notFound();
-  const { homework, status, grade, submission } = item;
+  useEffect(() => {
+    if (!id) return;
+    loadHomeworkPage(id)
+      .then((result) => {
+        if (!result) {
+          notFound();
+        }
+        setData(result);
+      })
+      .finally(() => setLoading(false));
+  }, [id]);
 
-  const [{ data: questions }, { data: answers }, { data: uploads }, { data: settings }, { data: released }] = await Promise.all([
-    db()
-      .from("quiz_questions")
-      // Never select correct_option here: this goes to the browser.
-      .select("id, version, type, prompt, options, points, position")
-      .eq("homework_id", id)
-      .in("version", ["both", student.version ?? "A"])
-      .order("position")
-      .order("id")
-      .returns<StudentQuestion[]>(),
-    submission
-      ? db().from("answers").select("*").eq("submission_id", submission.id).returns<Answer[]>()
-      : Promise.resolve({ data: [] as Answer[] }),
-    submission
-      ? db().from("uploads").select("*").eq("submission_id", submission.id).order("uploaded_at").returns<Upload[]>()
-      : Promise.resolve({ data: [] as Upload[] }),
-    db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>(),
-    // Only whether the result was released (task files lock then), never the marks themselves.
-    submission
-      ? db().from("grades").select("released_at").eq("submission_id", submission.id).maybeSingle<{ released_at: string | null }>()
-      : Promise.resolve({ data: null }),
-    logActivity(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id }),
-  ]);
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    );
+  }
 
-  const quiz = questions ?? [];
+  if (!data) {
+    notFound();
+    return null;
+  }
+
+  const { homework, student, questions, uploads, answers, submission, grade, settings, status } = data;
+  const quiz = questions;
   const mcq = quiz.filter((q) => q.type === "mcq");
   const short = quiz.filter((q) => q.type === "short");
-  const links = await signedLinks((uploads ?? []).map((u) => u.storage_path));
-  const uploadViews: UploadView[] = (uploads ?? []).map((u) => ({
-    id: u.id,
-    file_name: u.file_name,
-    file_type: u.file_type,
-    size_bytes: u.size_bytes,
-    link: links[u.storage_path] ?? null,
-  }));
+
   const saved: Record<string, SavedAnswer> = {};
   const earned: Record<string, number | null> = {};
-  for (const a of answers ?? []) {
+  for (const a of answers) {
     saved[a.question_id] = { answer_text: a.answer_text, selected_option: a.selected_option };
     earned[a.question_id] = a.manual_points ?? a.auto_points;
   }
+
   const unanswered = quiz.filter((q) => {
     const a = saved[q.id];
     return !a || (q.type === "mcq" ? a.selected_option === null : !a.answer_text?.trim());
   }).length;
 
-  // Quiz and short answer lock at hand-in; task files stay open until the teacher releases the result.
   const locked = submission?.status === "submitted";
-  const taskLocked = !!released?.released_at;
+  const taskLocked = !!grade?.released_at;
   const instructions = student.version === "B" ? homework.instructions_b : homework.instructions_a;
   const isOpen = status === "upcoming" || status === "in_progress";
 
@@ -159,7 +151,24 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
               {submission && submission.days_late > 0 && " Files added after the deadline count as late."}
             </p>
           )}
-          <Uploads homeworkId={id} uploads={uploadViews} locked={taskLocked} />
+          {locked && !taskLocked && (
+            <button
+              onClick={() => setOpenTextEditor(true)}
+              className="mb-3 w-full rounded-lg bg-indigo-50 px-4 py-2 font-medium text-indigo-700 hover:bg-indigo-100 transition"
+            >
+              ✍️ Write text
+            </button>
+          )}
+          {isOpen && (
+            <button
+              onClick={() => setOpenTextEditor(true)}
+              className="mb-3 w-full rounded-lg border-2 border-dashed border-indigo-300 bg-indigo-50/40 px-4 py-3 text-center text-sm font-medium text-indigo-700 hover:bg-indigo-50 transition"
+            >
+              Or write text instead
+            </button>
+          )}
+          <Uploads homeworkId={id} uploads={uploads} locked={taskLocked} />
+          {openTextEditor && <TextEditor homeworkId={id} onClose={() => setOpenTextEditor(false)} />}
         </section>
 
         {locked ? (
@@ -170,7 +179,7 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
                 ? "Your result is above."
                 : taskLocked
                   ? "Your teacher will share your result after the deadline."
-                  : uploadViews.length === 0
+                  : uploads.length === 0
                     ? "Your task isn't uploaded yet. Add your files above when it's ready."
                     : "Your teacher will mark it after the deadline. You can still change your task files above."}
             </p>
@@ -180,7 +189,7 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
             homeworkId={id}
             dueAt={homework.due_at}
             unanswered={unanswered}
-            fileCount={uploadViews.length}
+            fileCount={uploads.length}
             penalty={{
               perDay: settings?.late_penalty_per_day ?? DEFAULT_PENALTY.perDay,
               cap: settings?.late_penalty_cap ?? DEFAULT_PENALTY.cap,

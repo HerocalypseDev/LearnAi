@@ -8,7 +8,24 @@ import { requireUser } from "@/lib/session";
 import { bucket, safeFileName, uploadFolder } from "@/lib/storage";
 import type { Homework, QuizQuestion, Submission, User } from "@/lib/types";
 
+const MAX_TEXT_LENGTH = 20_000;
+
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
+
+/** Generate stable next text filename based on existing text uploads for this submission. */
+async function nextTextFileName(submissionId: string): Promise<string> {
+  const { data: existing } = await db()
+    .from("uploads")
+    .select("file_name")
+    .eq("submission_id", submissionId)
+    .filter("file_name", "ilike", "Writing-%.txt");
+  let index = 0;
+  for (const u of existing ?? []) {
+    const match = u.file_name.match(/^Writing-(\d+)\.txt$/);
+    if (match) index = Math.max(index, Number.parseInt(match[1], 10));
+  }
+  return `Writing-${index + 1}.txt`;
+}
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const MAX_ANSWER_LENGTH = 5000;
@@ -305,4 +322,40 @@ export async function submitHomework(homeworkId: string): Promise<Result> {
   revalidatePath(`/homework/${homework.id}`);
   revalidatePath("/dashboard");
   return { ok: true };
+}
+
+/**
+ * Upload plain text written by the student. Works like a normal file upload but creates a
+ * Document/Text download link from the content blob.
+ */
+export async function uploadTaskText(input: {
+  homeworkId: string;
+  text: string;
+}): Promise<Result<{ signedUrl: string; path: string }>> {
+  const student = await requireUser("student");
+  const homework = await loadHomework(input.homeworkId);
+  if (!homework) return { ok: false, error: "Homework not found." };
+  if (!input.text || !input.text.trim()) return { ok: false, error: "Write something before uploading." };
+  if (input.text.length > MAX_TEXT_LENGTH)
+    return { ok: false, error: `Text is ${input.text.length} characters; keep it under ${MAX_TEXT_LENGTH} characters.` };
+
+  const submission = await getOrCreateSubmission(student, homework.id);
+  if (submission.status === "submitted") return { ok: false, error: ALREADY_SUBMITTED };
+
+  const fileName = await nextTextFileName(submission.id);
+  const textBlob = new Blob([input.text], { type: "text/plain;charset=utf-8" });
+  const { count } = await db()
+    .from("uploads")
+    .select("id", { count: "exact", head: true })
+    .eq("submission_id", submission.id);
+  const problem = checkUpload(fileName, textBlob.size, count ?? 0);
+  if (problem) return { ok: false, error: problem };
+
+  const path = `${uploadFolder(student.id, homework.id)}/${crypto.randomUUID()}-${safeFileName(fileName)}`;
+  const { data, error } = await bucket().createSignedUploadUrl(path);
+  if (error || !data) {
+    console.error("createSignedUploadUrl failed", error?.message);
+    return { ok: false, error: "Couldn't start the upload. Try again." };
+  }
+  return { ok: true, signedUrl: data.signedUrl, path };
 }
