@@ -30,11 +30,11 @@ export function TaskEditor({ homeworkId, onClose, onSuccess, uploadId, initialTe
   const [progress, setProgress] = useState<string>("");
   const LOCAL_STORAGE_KEY = uploadId ? `task-text-${homeworkId}-${uploadId}` : `task-text-${homeworkId}`;
 
-  async function sendFile(url: string, blob: Blob, onProgress: (percent: number) => void): Promise<void> {
+  async function sendFile(url: string, blob: Blob, onProgress: (percent: number) => void, upsert = false): Promise<void> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("PUT", url);
-      xhr.setRequestHeader("x-upsert", "false");
+      xhr.setRequestHeader("x-upsert", upsert ? "true" : "false");
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
       xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
       xhr.onerror = () => reject(new Error("Upload failed. Check your internet."));
@@ -59,7 +59,7 @@ export function TaskEditor({ homeworkId, onClose, onSuccess, uploadId, initialTe
         return;
       }
 
-      await sendFile(start.signedUrl, textBlob, (percent) => setProgress(`${percent}%`));
+      await sendFile(start.signedUrl, textBlob, (percent) => setProgress(`${percent}%`), !!uploadId);
 
       const done = await confirmUpload({
         homeworkId,
@@ -112,7 +112,7 @@ export function TaskEditor({ homeworkId, onClose, onSuccess, uploadId, initialTe
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="flex w-full max-w-2xl max-h-[90vh] flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg overflow-hidden"
+        className="flex w-full max-w-5xl max-h-[95vh] flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between shrink-0">

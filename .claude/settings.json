@@ -4,10 +4,10 @@
   "env": {
     "ANTHROPIC_BASE_URL": "http://localhost:20128",
     "ANTHROPIC_AUTH_TOKEN": "omniroute",
-    "ANTHROPIC_MODEL": "kr/claude-sonnet-4.5",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "kr/claude-sonnet-4.5",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "kr/claude-sonnet-4.5",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "kr/claude-sonnet-4.5",
+    "ANTHROPIC_MODEL": "kc/openrouter/free",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "kc/openrouter/free",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "kc/openrouter/free",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "kc/openrouter/free",
     "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "131072",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   }
