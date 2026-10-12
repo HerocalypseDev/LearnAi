@@ -49,34 +49,39 @@ export function TaskEditor({ homeworkId, onClose }: TaskEditorProps) {
     setSaving(true);
     setError(null);
 
-    const textBlob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const fileName = `Writing-${Date.now()}.txt`;
-    const start = await requestUpload({ homeworkId, fileName, sizeBytes: textBlob.size });
-    if (!start.ok) {
-      setError(start.error);
-      setSaving(false);
-      return;
-    }
+    try {
+      const textBlob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const fileName = `Writing-${Date.now()}.txt`;
+      const start = await requestUpload({ homeworkId, fileName, sizeBytes: textBlob.size });
+      if (!start.ok) {
+        setError(start.error);
+        setSaving(false);
+        return;
+      }
 
-    await sendFile(start.signedUrl, textBlob, (percent) => setProgress(`${percent}%`));
-    const done = await confirmUpload({
-      homeworkId,
-      path: start.path,
-      fileName,
-      fileType: "text/plain",
-    });
-    if (!done.ok) {
-      setError(done.error);
-      setSaving(false);
-      return;
-    }
+      await sendFile(start.signedUrl, textBlob, (percent) => setProgress(`${percent}%`));
+      const done = await confirmUpload({
+        homeworkId,
+        path: start.path,
+        fileName,
+        fileType: "text/plain",
+      });
+      if (!done.ok) {
+        setError(done.error);
+        setSaving(false);
+        return;
+      }
 
-    setProgress("");
-    localStorage.removeItem(LOCAL_STORAGE_KEY);
-    setText("");
-    setSaving(false);
-    router.refresh();
-    onClose();
+      setProgress("");
+      localStorage.removeItem(LOCAL_STORAGE_KEY);
+      setText("");
+      router.refresh();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+      setSaving(false);
+      setProgress("");
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
