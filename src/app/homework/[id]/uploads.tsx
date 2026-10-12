@@ -44,13 +44,23 @@ function sendFile(url: string, file: File, onProgress: (percent: number) => void
   });
 }
 
-export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; uploads: UploadView[]; locked: boolean }) {
-  const router = useRouter();
+export function Uploads({
+  homeworkId,
+  uploads,
+  locked,
+  onUploadChange,
+}: {
+  homeworkId: string;
+  uploads: UploadView[];
+  locked: boolean;
+  onUploadChange?: () => void;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<InProgress[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [removing, setRemoving] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [editingUpload, setEditingUpload] = useState<{ id: string; text: string } | null>(null);
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -85,7 +95,7 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
 
     setErrors(problems);
     if (inputRef.current) inputRef.current.value = "";
-    router.refresh();
+    onUploadChange?.();
   }
 
   async function handleRemove(id: string) {
@@ -94,11 +104,40 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
     const result = await removeUpload(id);
     setRemoving(null);
     if (!result.ok) setErrors([result.error]);
-    router.refresh();
+    onUploadChange?.();
   }
+
+  async function handleEdit(upload: UploadView) {
+    if (!upload.link) return;
+    try {
+      const response = await fetch(upload.link);
+      const text = await response.text();
+      setEditingUpload({ id: upload.id, text });
+    } catch (err) {
+      setErrors([`Couldn't load ${upload.file_name}: ${err instanceof Error ? err.message : "fetch failed"}`]);
+    }
+  }
+
+  const isTextFile = (u: UploadView) =>
+    u.file_type === "text/plain" || /^Writing-\d+\.txt$/.test(u.file_name);
 
   const busy = progress.length > 0;
   const full = uploads.length >= MAX_FILES;
+
+  if (editingUpload) {
+    return (
+      <TaskEditor
+        homeworkId={homeworkId}
+        uploadId={editingUpload.id}
+        initialText={editingUpload.text}
+        onClose={() => setEditingUpload(null)}
+        onSuccess={() => {
+          setEditingUpload(null);
+          onUploadChange?.();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -118,11 +157,18 @@ export function Uploads({ homeworkId, uploads, locked }: { homeworkId: string; u
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">{u.file_name}</div>
               <div className="text-xs text-slate-500">{formatSize(u.size_bytes)}</div>
-              {u.link && (
-                <a href={u.link} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline">
-                  {isImage(u) || isPdf(u) ? "Preview" : "Download"}
-                </a>
-              )}
+              <div className="flex gap-2">
+                {u.link && (
+                  <a href={u.link} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline">
+                    {isImage(u) || isPdf(u) ? "Preview" : "Download"}
+                  </a>
+                )}
+                {!locked && isTextFile(u) && (
+                  <button onClick={() => handleEdit(u)} className="text-xs text-indigo-600 hover:underline">
+                    Edit
+                  </button>
+                )}
+              </div>
             </div>
             {!locked && (
               <button

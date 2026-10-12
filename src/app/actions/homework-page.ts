@@ -16,6 +16,7 @@ export interface HomeworkPageData {
   grade: Grade | null;
   settings: Settings | null;
   status: import("@/lib/rules").HomeworkStatus;
+  taskReleased: boolean;
 }
 
 export async function loadHomeworkPage(homeworkId: string): Promise<HomeworkPageData | null> {
@@ -28,48 +29,51 @@ export async function loadHomeworkPage(homeworkId: string): Promise<HomeworkPage
     .maybeSingle<Homework>();
   if (!homework) return null;
 
+  const { data: submission } = await db()
+    .from("submissions")
+    .select("*")
+    .eq("homework_id", homeworkId)
+    .eq("student_id", student.id)
+    .maybeSingle<Submission>();
+
   const [
     { data: questions },
-    { data: submission },
     { data: answers },
     { data: uploads },
     { data: settings },
+    { data: grade },
   ] = await Promise.all([
     db()
       .from("quiz_questions")
-      .select("id, homework_id, type, question_text, options, points, version")
+      .select("id, homework_id, type, prompt, options, points, version")
       .eq("homework_id", homeworkId)
       .or(`version.eq.${student.version},version.eq.both`)
-      .order("display_order")
+      .order("position")
       .returns<StudentQuestion[]>(),
-    db()
-      .from("submissions")
-      .select("*")
-      .eq("homework_id", homeworkId)
-      .eq("student_id", student.id)
-      .maybeSingle<Submission>(),
-    db()
-      .from("answers")
-      .select("*")
-      .eq("homework_id", homeworkId)
-      .eq("student_id", student.id)
-      .returns<Answer[]>(),
-    db()
-      .from("uploads")
-      .select("*")
-      .eq("homework_id", homeworkId)
-      .eq("student_id", student.id)
-      .order("uploaded_at")
-      .returns<Upload[]>(),
+    submission
+      ? db()
+          .from("answers")
+          .select("*")
+          .eq("submission_id", submission.id)
+          .returns<Answer[]>()
+      : { data: [] as Answer[] },
+    submission
+      ? db()
+          .from("uploads")
+          .select("*")
+          .eq("submission_id", submission.id)
+          .order("uploaded_at")
+          .returns<Upload[]>()
+      : { data: [] as Upload[] },
     db().from("settings").select("*").maybeSingle<Settings>(),
+    submission
+      ? db().from("grades").select("*").eq("submission_id", submission.id).maybeSingle<Grade>()
+      : { data: null },
   ]);
-
-  const { data: grade } = submission
-    ? await db().from("grades").select("*").eq("submission_id", submission.id).maybeSingle<Grade>()
-    : { data: null };
 
   const now = new Date();
   const dueAt = new Date(homework.due_at);
+  const taskReleased = !!grade?.released_at;
   const visibleGrade =
     grade && isGradeVisible(dueAt, grade.released_at ? new Date(grade.released_at) : null, now) ? grade : null;
 
@@ -94,5 +98,6 @@ export async function loadHomeworkPage(homeworkId: string): Promise<HomeworkPage
     grade: visibleGrade,
     settings: settings ?? null,
     status,
+    taskReleased,
   };
 }

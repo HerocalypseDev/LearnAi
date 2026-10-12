@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { saveLocalStorage, loadLocalStorage } from "@/lib/local-storage-client";
-import { confirmUpload, requestUpload } from "@/app/actions/student";
+import { uploadTaskText, confirmUpload } from "@/app/actions/student";
 import { Spinner } from "@/components/spinner";
+import { saveLocalStorage, loadLocalStorage } from "@/lib/local-storage-client";
 import { appendListLine, insertListLine } from "@/lib/task-text";
 
 function isListItem(text: string): boolean {
@@ -17,17 +16,19 @@ function isListItem(text: string): boolean {
 export interface TaskEditorProps {
   homeworkId: string;
   onClose: () => void;
+  onSuccess?: () => void;
+  uploadId?: string;
+  initialText?: string;
 }
 
-export function TaskEditor({ homeworkId, onClose }: TaskEditorProps) {
+export function TaskEditor({ homeworkId, onClose, onSuccess, uploadId, initialText }: TaskEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const router = useRouter();
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [characterCount, setCharacterCount] = useState(0);
   const [progress, setProgress] = useState<string>("");
-  const LOCAL_STORAGE_KEY = `task-text-${homeworkId}`;
+  const LOCAL_STORAGE_KEY = uploadId ? `task-text-${homeworkId}-${uploadId}` : `task-text-${homeworkId}`;
 
   async function sendFile(url: string, blob: Blob, onProgress: (percent: number) => void): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -51,8 +52,7 @@ export function TaskEditor({ homeworkId, onClose }: TaskEditorProps) {
 
     try {
       const textBlob = new Blob([text], { type: "text/plain;charset=utf-8" });
-      const fileName = `Writing-${Date.now()}.txt`;
-      const start = await requestUpload({ homeworkId, fileName, sizeBytes: textBlob.size });
+      const start = await uploadTaskText({ homeworkId, text, uploadId });
       if (!start.ok) {
         setError(start.error);
         setSaving(false);
@@ -60,10 +60,11 @@ export function TaskEditor({ homeworkId, onClose }: TaskEditorProps) {
       }
 
       await sendFile(start.signedUrl, textBlob, (percent) => setProgress(`${percent}%`));
+
       const done = await confirmUpload({
         homeworkId,
         path: start.path,
-        fileName,
+        fileName: start.fileName,
         fileType: "text/plain",
       });
       if (!done.ok) {
@@ -75,7 +76,7 @@ export function TaskEditor({ homeworkId, onClose }: TaskEditorProps) {
       setProgress("");
       localStorage.removeItem(LOCAL_STORAGE_KEY);
       setText("");
-      router.refresh();
+      onSuccess?.();
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");

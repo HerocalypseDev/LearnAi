@@ -33,6 +33,12 @@ export default function HomeworkPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
+  const reloadData = async () => {
+    if (!id) return;
+    const result = await loadHomeworkPage(id);
+    if (result) setData(result);
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -64,7 +70,7 @@ export default function HomeworkPage() {
   }).length;
 
   const locked = submission?.status === "submitted";
-  const taskLocked = !!grade?.released_at;
+  const taskLocked = data.taskReleased;
   const instructions = student.version === "B" ? homework.instructions_b : homework.instructions_a;
   const isOpen = status === "upcoming" || status === "in_progress";
 
@@ -167,8 +173,14 @@ export default function HomeworkPage() {
               Or write text instead
             </button>
           )}
-          <Uploads homeworkId={id} uploads={uploads} locked={taskLocked} />
-          {openTextEditor && <TextEditor homeworkId={id} onClose={() => setOpenTextEditor(false)} />}
+          <Uploads homeworkId={id} uploads={uploads} locked={taskLocked} onUploadChange={reloadData} />
+          {openTextEditor && (
+            <TextEditor
+              homeworkId={id}
+              onClose={() => setOpenTextEditor(false)}
+              onSuccess={reloadData}
+            />
+          )}
         </section>
 
         {locked ? (

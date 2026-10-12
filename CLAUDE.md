@@ -42,3 +42,12 @@ npm test            # vitest
 npm run lint
 npm run build
 ```
+
+## Deployment
+
+After every change that modifies code:
+1. Stage and commit changes with descriptive message
+2. Push to `main` branch: `git push origin main`
+3. Deploy to Vercel: `vercel --prod`
+
+Always deploy after fixing bugs or adding features so production stays current.
