@@ -112,10 +112,10 @@ export function TaskEditor({ homeworkId, onClose, onSuccess, uploadId, initialTe
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div
-        className="flex w-full max-w-2xl flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg"
+        className="flex w-full max-w-2xl max-h-[90vh] flex-col gap-4 rounded-2xl bg-white p-6 shadow-lg overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between shrink-0">
           <h2 className="text-lg font-bold">Write your task</h2>
           <button
             onClick={onClose}
@@ -126,7 +126,7 @@ export function TaskEditor({ homeworkId, onClose, onSuccess, uploadId, initialTe
           </button>
         </div>
 
-        <div className="relative min-h-[300px] flex-1">
+        <div className="relative flex-1 min-h-0">
           <textarea
             ref={textareaRef}
             value={text}
@@ -134,12 +134,11 @@ export function TaskEditor({ homeworkId, onClose, onSuccess, uploadId, initialTe
             onKeyDown={handleKeyDown}
             disabled={saving}
             placeholder="Type your task here…"
-            rows={15}
-            className="w-full resize-none rounded-xl border border-slate-200 p-3 leading-relaxed focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed"
+            className="w-full h-full resize-none rounded-xl border border-slate-200 p-3 leading-relaxed focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed"
           />
         </div>
 
-        <div className="mb-2 flex items-center justify-between text-sm">
+        <div className="flex items-center justify-between text-sm shrink-0">
           <button
             onClick={() => {
               setText(text ? appendListLine(text, "") : "- ");
@@ -155,14 +154,14 @@ export function TaskEditor({ homeworkId, onClose, onSuccess, uploadId, initialTe
           </span>
         </div>
 
-        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 shrink-0">{error}</p>}
         {progress && (
-          <div className="rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-700">
+          <div className="rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-700 shrink-0">
             Uploading: {progress}
           </div>
         )}
 
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-2 shrink-0">
           <button
             onClick={onClose}
             disabled={saving}
