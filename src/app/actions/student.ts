@@ -46,7 +46,7 @@ function findSubmission(studentId: string, homeworkId: string) {
   );
 }
 
-async function getOrCreateSubmission(student: User, homeworkId: string): Promise<Submission> {
+async function getOrCreateSubmission(student: Pick<User, "id">, homeworkId: string): Promise<Submission> {
   const find = () => findSubmission(student.id, homeworkId);
 
   const { data: existing, error: findError } = await find();
