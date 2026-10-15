@@ -8,7 +8,7 @@ import { cardClass, linkCardClass } from "@/components/ui";
 import { StatusPill } from "@/components/status-pill";
 import { TopBar } from "@/components/top-bar";
 import { logActivityInBackground } from "@/lib/activity";
-import { requireUser } from "@/lib/session";
+import { requireUserWith } from "@/lib/session";
 import { loadStudentHomework, type StudentHomework } from "@/lib/student-data";
 import { earnedBadges } from "@/lib/rules";
 import { formatDateTime } from "@/lib/time";
@@ -16,10 +16,12 @@ import { formatDateTime } from "@/lib/time";
 const WEEKS = [1, 2, 3, 4];
 
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
-  const student = await requireUser("student");
-  const { done: doneParam } = await searchParams;
+  // One wave after the cookie check: the user row, the homework list and this student's submissions and grades.
+  const [[student, items], { done: doneParam }] = await Promise.all([
+    requireUserWith("student", (studentId) => loadStudentHomework(studentId)),
+    searchParams,
+  ]);
   logActivityInBackground(student.id, "page_view", { page: "dashboard" });
-  const items = await loadStudentHomework(student.id);
 
   const toDo = items.filter((i) => i.status === "upcoming" || i.status === "in_progress");
   const overdue = items.filter((i) => i.status === "missing");
