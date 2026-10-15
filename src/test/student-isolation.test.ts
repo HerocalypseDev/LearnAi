@@ -28,6 +28,22 @@ describe("student-facing code", () => {
     expect(page).toMatch(/from\("quiz_questions"\)\s*\.select\("id, version, type, prompt, options, points, position"\)/);
   });
 
+  it("the homework page renders on the server and selects explicit columns everywhere", () => {
+    // A client page that loads its data through a server action ships every selected column to the browser
+    // (this once leaked the student's password hash, the teacher's marking notes and auto-marked points).
+    const page = readFileSync(join(root, "app/homework/[id]/page.tsx"), "utf8");
+    expect(page).not.toMatch(/^\s*["']use client["']/);
+    for (const file of files(join(root, "app/homework"))) {
+      expect(strip(readFileSync(file, "utf8")), file).not.toMatch(/\.select\(\s*["']\*["']\s*\)/);
+    }
+  });
+
+  it("student pages never pass auto_points or a password hash to the browser", () => {
+    for (const file of files(join(root, "app/homework"))) {
+      expect(strip(readFileSync(file, "utf8")), file).not.toMatch(/auto_points|password_hash/);
+    }
+  });
+
   it("student server actions answer with ok/error only, never question data", () => {
     const src = strip(readFileSync(join(root, "app/actions/student.ts"), "utf8"));
     expect(src).not.toMatch(/return\s*{\s*ok:\s*true,\s*(question|correct|auto_points)/);

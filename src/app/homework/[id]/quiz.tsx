@@ -15,6 +15,12 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 
 const TEXT_SAVE_DELAY_MS = 800;
 
+/** Fired on window whenever an answer changes, so the hand-in panel's "not answered yet" count stays current. */
+export const ANSWER_EVENT = "homework-answer";
+export type AnswerEventDetail = { questionId: string; answered: boolean };
+
+const isAnswered = (v: SavedAnswer) => v.selected_option !== null || !!v.answer_text?.trim();
+
 /** Time spent on a question since it was last reported, including the current focus. */
 function takeActiveMs(focusStart: Record<string, number>, unsent: Record<string, number>, questionId: string) {
   const now = Date.now();
@@ -45,14 +51,26 @@ export function Quiz({
   const [status, setStatus] = useState<Record<string, SaveState>>({});
   const [error, setError] = useState<string | null>(null);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // The latest value of each question still waiting for its delayed save.
+  const unsaved = useRef<Record<string, SavedAnswer>>({});
   // Time spent on each question: start time while focused, and time not yet reported.
   const focusStart = useRef<Record<string, number>>({});
   const unsentMs = useRef<Record<string, number>>({});
 
   useEffect(() => {
     const pending = timers.current;
-    return () => Object.values(pending).forEach(clearTimeout);
-  }, []);
+    const values = unsaved.current;
+    // Leaving the page (Back, a link) within the save delay must not lose the last words typed: save them now.
+    return () => {
+      for (const [questionId, timer] of Object.entries(pending)) {
+        clearTimeout(timer);
+        const value = values[questionId];
+        if (value) {
+          void saveAnswer({ homeworkId, questionId, answerText: value.answer_text ?? undefined, selectedOption: value.selected_option });
+        }
+      }
+    };
+  }, [homeworkId]);
 
   async function save(questionId: string, value: SavedAnswer) {
     setStatus((s) => ({ ...s, [questionId]: "saving" }));
@@ -69,16 +87,28 @@ export function Quiz({
 
   function update(questionId: string, value: SavedAnswer, delay: number) {
     setAnswers((a) => ({ ...a, [questionId]: value }));
+    window.dispatchEvent(new CustomEvent<AnswerEventDetail>(ANSWER_EVENT, { detail: { questionId, answered: isAnswered(value) } }));
     clearTimeout(timers.current[questionId]);
-    if (delay === 0) void save(questionId, value);
-    else timers.current[questionId] = setTimeout(() => void save(questionId, value), delay);
+    delete timers.current[questionId];
+    if (delay === 0) {
+      delete unsaved.current[questionId];
+      void save(questionId, value);
+    } else {
+      unsaved.current[questionId] = value;
+      timers.current[questionId] = setTimeout(() => {
+        delete timers.current[questionId];
+        delete unsaved.current[questionId];
+        void save(questionId, value);
+      }, delay);
+    }
   }
 
   function flush(questionId: string) {
     if (timers.current[questionId]) {
       clearTimeout(timers.current[questionId]);
       delete timers.current[questionId];
-      const value = answers[questionId];
+      const value = unsaved.current[questionId] ?? answers[questionId];
+      delete unsaved.current[questionId];
       if (value) void save(questionId, value);
     }
   }
@@ -88,6 +118,7 @@ export function Quiz({
       {questions.map((q, i) => {
         const value = answers[q.id] ?? { answer_text: null, selected_option: null };
         const points = earned?.[q.id];
+        const options = Array.isArray(q.options) ? q.options : [];
         return (
           <fieldset
             key={q.id}
@@ -121,7 +152,8 @@ export function Quiz({
 
             {q.type === "mcq" ? (
               <div className="space-y-2">
-                {q.options.map((option, oi) => {
+                {options.length === 0 && <p className="text-sm text-slate-500">This question isn&apos;t ready yet. Tell your teacher.</p>}
+                {options.map((option, oi) => {
                   const picked = value.selected_option === oi;
                   return (
                     <label

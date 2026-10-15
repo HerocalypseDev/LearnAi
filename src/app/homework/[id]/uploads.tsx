@@ -1,11 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { TaskEditor } from "./text-editor";
-import { saveLocalStorage, loadLocalStorage } from "@/lib/local-storage-client";
 import { confirmUpload, removeUpload, requestUpload as serverRequestUpload } from "@/app/actions/student";
 import { checkUpload, MAX_FILES } from "@/lib/rules";
+import { isWritingFileName } from "@/lib/task-text";
+import { TaskEditor } from "./text-editor";
 
 export interface UploadView {
   id: string;
@@ -16,6 +15,7 @@ export interface UploadView {
 }
 
 interface InProgress {
+  key: string;
   name: string;
   percent: number;
 }
@@ -46,13 +46,18 @@ function sendFile(url: string, file: File, onProgress: (percent: number) => void
 
 export function Uploads({
   homeworkId,
+  studentId,
   uploads,
   locked,
+  refreshing = false,
   onUploadChange,
 }: {
   homeworkId: string;
+  studentId: string;
   uploads: UploadView[];
   locked: boolean;
+  /** The page is re-reading the list after a change. */
+  refreshing?: boolean;
   onUploadChange?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -61,6 +66,7 @@ export function Uploads({
   const [removing, setRemoving] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [editingUpload, setEditingUpload] = useState<{ id: string; text: string } | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -69,19 +75,21 @@ export function Uploads({
     let count = uploads.length;
     const problems: string[] = [];
 
-    for (const file of list) {
+    for (const [i, file] of list.entries()) {
       const problem = checkUpload(file.name, file.size, count);
       if (problem) {
         problems.push(problem);
         continue;
       }
       count++;
-      setProgress((p) => [...p, { name: file.name, percent: 0 }]);
+      // Keyed per pick, so two files with the same name each get their own progress bar.
+      const key = `${Date.now()}-${i}`;
+      setProgress((p) => [...p, { key, name: file.name, percent: 0 }]);
       try {
         const start = await serverRequestUpload({ homeworkId, fileName: file.name, sizeBytes: file.size });
         if (!start.ok) throw new Error(start.error);
         await sendFile(start.signedUrl, file, (percent) =>
-          setProgress((p) => p.map((x) => (x.name === file.name ? { ...x, percent } : x))),
+          setProgress((p) => p.map((x) => (x.key === key ? { ...x, percent } : x))),
         );
         const done = await confirmUpload({ homeworkId, path: start.path, fileName: file.name, fileType: file.type });
         if (!done.ok) throw new Error(done.error);
@@ -89,7 +97,7 @@ export function Uploads({
         count--;
         problems.push(`${file.name}: ${e instanceof Error ? e.message : "upload failed"}`);
       } finally {
-        setProgress((p) => p.filter((x) => x.name !== file.name));
+        setProgress((p) => p.filter((x) => x.key !== key));
       }
     }
 
@@ -103,44 +111,41 @@ export function Uploads({
     setRemoving(id);
     const result = await removeUpload(id);
     setRemoving(null);
-    if (!result.ok) setErrors([result.error]);
+    setErrors(result.ok ? [] : [result.error]);
     onUploadChange?.();
   }
 
+  /** Open a written piece in the editor with its current text; saving replaces that same file. */
   async function handleEdit(upload: UploadView) {
-    if (!upload.link) return;
+    if (!upload.link) return setErrors([`Couldn't open ${upload.file_name}. Reload the page and try again.`]);
+    setOpening(upload.id);
     try {
-      const response = await fetch(upload.link);
-      const text = await response.text();
-      setEditingUpload({ id: upload.id, text });
+      const response = await fetch(upload.link, { cache: "no-store" });
+      if (!response.ok) throw new Error(`it didn't load (${response.status}). Reload the page and try again.`);
+      setErrors([]);
+      setEditingUpload({ id: upload.id, text: await response.text() });
     } catch (err) {
-      setErrors([`Couldn't load ${upload.file_name}: ${err instanceof Error ? err.message : "fetch failed"}`]);
+      setErrors([`Couldn't open ${upload.file_name}: ${err instanceof Error ? err.message : "check your internet"}`]);
+    } finally {
+      setOpening(null);
     }
   }
 
-  const isTextFile = (u: UploadView) =>
-    u.file_type === "text/plain" || /^Writing-\d+\.txt$/.test(u.file_name);
-
-  const busy = progress.length > 0;
+  const busy = progress.length > 0 || refreshing;
   const full = uploads.length >= MAX_FILES;
-
-  if (editingUpload) {
-    return (
-      <TaskEditor
-        homeworkId={homeworkId}
-        uploadId={editingUpload.id}
-        initialText={editingUpload.text}
-        onClose={() => setEditingUpload(null)}
-        onSuccess={() => {
-          setEditingUpload(null);
-          onUploadChange?.();
-        }}
-      />
-    );
-  }
 
   return (
     <div className="space-y-3">
+      {editingUpload && !locked && (
+        <TaskEditor
+          homeworkId={homeworkId}
+          studentId={studentId}
+          uploadId={editingUpload.id}
+          initialText={editingUpload.text}
+          onClose={() => setEditingUpload(null)}
+          onSuccess={() => onUploadChange?.()}
+        />
+      )}
       {uploads.length === 0 && !busy && <p className="text-sm text-slate-500">No files attached yet.</p>}
 
       <ul className="space-y-2">
@@ -163,9 +168,14 @@ export function Uploads({
                     {isImage(u) || isPdf(u) ? "Preview" : "Download"}
                   </a>
                 )}
-                {!locked && isTextFile(u) && (
-                  <button onClick={() => handleEdit(u)} className="text-xs text-indigo-600 hover:underline">
-                    Edit
+                {!locked && isWritingFileName(u.file_name) && (
+                  <button
+                    type="button"
+                    onClick={() => void handleEdit(u)}
+                    disabled={opening !== null || busy}
+                    className="text-xs text-indigo-600 hover:underline disabled:opacity-50"
+                  >
+                    {opening === u.id ? "Opening…" : "Edit"}
                   </button>
                 )}
               </div>
@@ -182,7 +192,7 @@ export function Uploads({
           </li>
         ))}
         {progress.map((p) => (
-          <li key={p.name} className="animate-fade-up rounded-xl border border-indigo-200 bg-white p-3">
+          <li key={p.key} className="animate-fade-up rounded-xl border border-indigo-200 bg-white p-3">
             <div className="mb-1 truncate text-sm">Uploading {p.name}…</div>
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
               <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all" style={{ width: `${p.percent}%` }} />

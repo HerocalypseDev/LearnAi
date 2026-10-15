@@ -76,6 +76,8 @@ export async function login(_prev: LoginState, formData: FormData): Promise<Logi
       return fail("Setup: ADMIN_PASSWORD is not set in Vercel, or the site hasn't been redeployed since it was added.");
     }
     if (password.trim() !== initial) {
+      // Counts toward the lockout like any wrong password, so ADMIN_PASSWORD can't be guessed without limit.
+      await logActivity(user.id, "login_failed");
       return fail("Setup: that isn't the ADMIN_PASSWORD saved in Vercel. Check it for typos or extra spaces.");
     }
     passwordHash = await bcrypt.hash(initial, 12);

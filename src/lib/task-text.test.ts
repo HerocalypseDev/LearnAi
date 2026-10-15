@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { appendListLine, insertListLine, nextTextFileName } from "./task-text";
+import { appendListLine, cursorAfterInsert, insertListLine, isWritingFileName, nextListPrefix, nextTextFileName, textProblem } from "./task-text";
 
 describe("nextTextFileName", () => {
   it("returns Writing-1.txt for empty list", () => {
@@ -42,8 +42,9 @@ describe("appendListLine", () => {
     expect(appendListLine("- item 1", "item 2")).toBe("- item 1\n- item 2");
   });
 
-  it("continues numbered list", () => {
-    expect(appendListLine("1. first", "second")).toBe("1. first\n1. second");
+  it("continues numbered list with the next number", () => {
+    expect(appendListLine("1. first", "second")).toBe("1. first\n2. second");
+    expect(appendListLine("9. ninth", "")).toBe("9. ninth\n10. ");
   });
 
   it("adds plain line after non-list", () => {
@@ -91,5 +92,61 @@ describe("edge cases", () => {
     const text = "x".repeat(19995);
     const result = appendListLine(text, "end");
     expect(result.length).toBeLessThanOrEqual(20001);
+  });
+});
+
+describe("Writing-N.txt names", () => {
+  it("only the server's names count as written pieces", () => {
+    expect(isWritingFileName("Writing-1.txt")).toBe(true);
+    expect(isWritingFileName("Writing-12.txt")).toBe(true);
+    expect(isWritingFileName("writing-1.txt")).toBe(false);
+    expect(isWritingFileName("Writing-1.txt.exe")).toBe(false);
+    expect(isWritingFileName("notes.txt")).toBe(false);
+  });
+  it("gaps are not reused, so a removed Writing-2 never comes back as a different text", () => {
+    expect(nextTextFileName([{ file_name: "Writing-1.txt" }, { file_name: "Writing-3.txt" }])).toBe("Writing-4.txt");
+  });
+});
+
+describe("textProblem", () => {
+  it("rejects empty and whitespace-only text", () => {
+    expect(textProblem("")).toMatch(/Write something/);
+    expect(textProblem("  \n\t ")).toMatch(/Write something/);
+  });
+  it("allows exactly 20,000 characters and rejects 20,001", () => {
+    expect(textProblem("a".repeat(20_000))).toBeNull();
+    expect(textProblem("a".repeat(20_001))).toMatch(/20,000/);
+  });
+});
+
+describe("list editing", () => {
+  it("knows bullets, stars and numbers, keeping indentation", () => {
+    expect(nextListPrefix("- a")).toBe("- ");
+    expect(nextListPrefix("* a")).toBe("* ");
+    expect(nextListPrefix("  - nested")).toBe("  - ");
+    expect(nextListPrefix("3. c")).toBe("4. ");
+    expect(nextListPrefix("plain")).toBe("");
+    expect(nextListPrefix("1.5 apples")).toBe("");
+    expect(nextListPrefix("-5 degrees")).toBe("");
+  });
+  it("Enter in a numbered list counts up", () => {
+    expect(insertListLine("1. one", 6, "")).toBe("1. one\n2. ");
+  });
+  it("Enter on an empty item ends the list instead of adding another bullet", () => {
+    expect(insertListLine("- a\n- ", 6, "")).toBe("- a\n");
+    expect(insertListLine("1. a\n2. ", 8, "")).toBe("1. a\n");
+  });
+  it("Enter on a plain line after a list is a plain new line", () => {
+    expect(insertListLine("- a\ntext", 8, "")).toBe("- a\ntext\n");
+  });
+  it("puts the cursor right after the new bullet", () => {
+    const before = "- a";
+    const after = insertListLine(before, 3, "");
+    expect(after.slice(0, cursorAfterInsert(before, after, 3))).toBe("- a\n- ");
+  });
+  it("puts the cursor where the removed bullet was", () => {
+    const before = "- a\n- ";
+    const after = insertListLine(before, 6, "");
+    expect(cursorAfterInsert(before, after, 6)).toBe(4);
   });
 });

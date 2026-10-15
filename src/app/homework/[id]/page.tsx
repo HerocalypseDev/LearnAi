@@ -1,76 +1,98 @@
-"use client";
-
 import Link from "next/link";
-import { notFound, useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { notFound } from "next/navigation";
 import { Countdown } from "@/components/countdown";
 import { StatusPill } from "@/components/status-pill";
 import { TopBar } from "@/components/top-bar";
+import { logActivity } from "@/lib/activity";
+import { db } from "@/lib/db";
+import { visibleQuestionPoints } from "@/lib/marking";
 import { DEFAULT_PENALTY, PARTS } from "@/lib/rules";
+import { requireUser } from "@/lib/session";
+import { signedLinks } from "@/lib/storage";
+import { loadStudentHomework } from "@/lib/student-data";
 import { formatDateTime } from "@/lib/time";
+import type { Answer, Settings, StudentQuestion, Upload } from "@/lib/types";
 import { Quiz, type SavedAnswer } from "./quiz";
 import { SubmitPanel } from "./submit-panel";
-import { TaskEditor as TextEditor } from "./text-editor";
-import { Uploads } from "./uploads";
-import { loadHomeworkPage, type HomeworkPageData } from "@/app/actions/homework-page";
+import { TaskSection } from "./task-section";
+import type { UploadView } from "./uploads";
 
-export default function HomeworkPage() {
-  const params = useParams<{ id: string }>();
-  const id = params?.id;
-  const [openTextEditor, setOpenTextEditor] = useState(false);
-  const [data, setData] = useState<HomeworkPageData | null>(null);
-  const [loading, setLoading] = useState(true);
+// A server component on purpose: everything below is read with the server's key, and only the props passed to the
+// client components (Quiz, TaskSection, SubmitPanel) reach the browser. Never the answer key, auto-marked points
+// before release, the teacher's marking notes or the student's own user row.
+export default async function HomeworkPage({ params }: PageProps<"/homework/[id]">) {
+  const { id } = await params;
+  const student = await requireUser("student");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
-  useEffect(() => {
-    if (!id) return;
-    loadHomeworkPage(id)
-      .then((result) => {
-        if (!result) {
-          notFound();
-        }
-        setData(result);
-      })
-      .finally(() => setLoading(false));
-  }, [id]);
+  const [item] = await loadStudentHomework(student.id, id);
+  if (!item) notFound();
+  const { homework, status, grade, submission } = item;
 
-  const reloadData = async () => {
-    if (!id) return;
-    const result = await loadHomeworkPage(id);
-    if (result) setData(result);
-  };
+  const [{ data: questions }, { data: answers }, { data: uploads }, { data: settings }, { data: released }] = await Promise.all([
+    db()
+      .from("quiz_questions")
+      // Explicit columns: this goes to the browser.
+      .select("id, version, type, prompt, options, points, position")
+      .eq("homework_id", id)
+      .in("version", ["both", student.version ?? "A"])
+      .order("position")
+      .order("id")
+      .returns<StudentQuestion[]>(),
+    submission
+      ? db()
+          .from("answers")
+          .select("question_id, answer_text, selected_option, manual_points")
+          .eq("submission_id", submission.id)
+          .returns<Pick<Answer, "question_id" | "answer_text" | "selected_option" | "manual_points">[]>()
+      : Promise.resolve({ data: [] as Pick<Answer, "question_id" | "answer_text" | "selected_option" | "manual_points">[] }),
+    submission
+      ? db()
+          .from("uploads")
+          .select("id, file_name, file_type, size_bytes, storage_path, uploaded_at")
+          .eq("submission_id", submission.id)
+          .order("uploaded_at")
+          .order("id")
+          .returns<Omit<Upload, "submission_id">[]>()
+      : Promise.resolve({ data: [] as Omit<Upload, "submission_id">[] }),
+    db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>(),
+    // Only whether the result was released (task files lock then), never the marks themselves: the grade above is
+    // null until the child may see it, but the lock must follow the release even before the deadline.
+    submission
+      ? db().from("grades").select("released_at").eq("submission_id", submission.id).maybeSingle<{ released_at: string | null }>()
+      : Promise.resolve({ data: null }),
+    logActivity(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id }),
+  ]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-slate-600">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!data) {
-    notFound();
-    return null;
-  }
-
-  const { homework, student, questions, uploads, answers, submission, grade, settings, status } = data;
-  const quiz = questions;
+  const quiz = (questions ?? []).map((q) => ({ ...q, options: Array.isArray(q.options) ? q.options.map(String) : [] }));
   const mcq = quiz.filter((q) => q.type === "mcq");
   const short = quiz.filter((q) => q.type === "short");
-
+  const links = await signedLinks((uploads ?? []).map((u) => u.storage_path));
+  const uploadViews: UploadView[] = (uploads ?? []).map((u) => ({
+    id: u.id,
+    file_name: u.file_name,
+    file_type: u.file_type,
+    size_bytes: u.size_bytes,
+    link: links[u.storage_path] ?? null,
+  }));
   const saved: Record<string, SavedAnswer> = {};
-  const earned: Record<string, number | null> = {};
-  for (const a of answers) {
+  const marks: Record<string, { selected_option: number | null; manual_points: number | null }> = {};
+  for (const a of answers ?? []) {
     saved[a.question_id] = { answer_text: a.answer_text, selected_option: a.selected_option };
-    earned[a.question_id] = a.manual_points ?? a.auto_points;
+    marks[a.question_id] = { selected_option: a.selected_option, manual_points: a.manual_points };
   }
+  // Per-question points only once the result is visible, re-marked from the current questions like the total was.
+  const earned = grade ? await visibleQuestionPoints(quiz.map((q) => q.id), marks) : undefined;
+  const unansweredIds = quiz
+    .filter((q) => {
+      const a = saved[q.id];
+      return !a || (q.type === "mcq" ? a.selected_option === null : !a.answer_text?.trim());
+    })
+    .map((q) => q.id);
 
-  const unanswered = quiz.filter((q) => {
-    const a = saved[q.id];
-    return !a || (q.type === "mcq" ? a.selected_option === null : !a.answer_text?.trim());
-  }).length;
-
+  // Quiz and short answer lock at hand-in; task files stay open until the teacher releases the result.
   const locked = submission?.status === "submitted";
-  const taskLocked = data.taskReleased;
+  const taskLocked = !!released?.released_at;
   const instructions = student.version === "B" ? homework.instructions_b : homework.instructions_a;
   const isOpen = status === "upcoming" || status === "in_progress";
 
@@ -132,14 +154,14 @@ export default function HomeworkPage() {
         {mcq.length > 0 && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <PartHeading part={1} title="Quiz" points={PARTS.mcq} />
-            <Quiz homeworkId={id} questions={mcq} initial={saved} locked={locked} earned={grade ? earned : undefined} />
+            <Quiz homeworkId={id} questions={mcq} initial={saved} locked={locked} earned={earned} />
           </section>
         )}
 
         {short.length > 0 && (
           <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
             <PartHeading part={2} title="Short answer" points={PARTS.short} />
-            <Quiz homeworkId={id} questions={short} initial={saved} locked={locked} earned={grade ? earned : undefined} />
+            <Quiz homeworkId={id} questions={short} initial={saved} locked={locked} earned={earned} />
           </section>
         )}
 
@@ -154,33 +176,10 @@ export default function HomeworkPage() {
           {locked && !taskLocked && (
             <p className="mb-3 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 ring-1 ring-emerald-200">
               Your quiz is handed in, but you can still add or change your task files here until your teacher releases your result.
-              {submission && submission.days_late > 0 && " Files added after the deadline count as late."}
+              {" Files added or changed after the deadline count as late."}
             </p>
           )}
-          {locked && !taskLocked && (
-            <button
-              onClick={() => setOpenTextEditor(true)}
-              className="mb-3 w-full rounded-lg bg-indigo-50 px-4 py-2 font-medium text-indigo-700 hover:bg-indigo-100 transition"
-            >
-              ✍️ Write text
-            </button>
-          )}
-          {isOpen && (
-            <button
-              onClick={() => setOpenTextEditor(true)}
-              className="mb-3 w-full rounded-lg border-2 border-dashed border-indigo-300 bg-indigo-50/40 px-4 py-3 text-center text-sm font-medium text-indigo-700 hover:bg-indigo-50 transition"
-            >
-              Or write text instead
-            </button>
-          )}
-          <Uploads homeworkId={id} uploads={uploads} locked={taskLocked} onUploadChange={reloadData} />
-          {openTextEditor && (
-            <TextEditor
-              homeworkId={id}
-              onClose={() => setOpenTextEditor(false)}
-              onSuccess={reloadData}
-            />
-          )}
+          <TaskSection homeworkId={id} studentId={student.id} uploads={uploadViews} locked={taskLocked} />
         </section>
 
         {locked ? (
@@ -191,7 +190,7 @@ export default function HomeworkPage() {
                 ? "Your result is above."
                 : taskLocked
                   ? "Your teacher will share your result after the deadline."
-                  : uploads.length === 0
+                  : uploadViews.length === 0
                     ? "Your task isn't uploaded yet. Add your files above when it's ready."
                     : "Your teacher will mark it after the deadline. You can still change your task files above."}
             </p>
@@ -200,8 +199,8 @@ export default function HomeworkPage() {
           <SubmitPanel
             homeworkId={id}
             dueAt={homework.due_at}
-            unanswered={unanswered}
-            fileCount={uploads.length}
+            unansweredIds={unansweredIds}
+            fileCount={uploadViews.length}
             penalty={{
               perDay: settings?.late_penalty_per_day ?? DEFAULT_PENALTY.perDay,
               cap: settings?.late_penalty_cap ?? DEFAULT_PENALTY.cap,

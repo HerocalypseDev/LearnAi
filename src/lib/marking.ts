@@ -118,3 +118,26 @@ export async function loadSubmissionSummaries(homeworkId?: string): Promise<Subm
   }
   return out;
 }
+
+/**
+ * Points per question for a child whose result is visible: multiple choice re-marked against the current answer key
+ * (the same truth the marks were saved from), short answers as marked. Only the numbers leave this function, never the key.
+ * Call it only once isGradeVisible() is true.
+ */
+export async function visibleQuestionPoints(
+  questionIds: string[],
+  answers: Record<string, { selected_option: number | null; manual_points: number | null }>,
+): Promise<Record<string, number | null>> {
+  if (questionIds.length === 0) return {};
+  const { data } = await db()
+    .from("quiz_questions")
+    .select("id, type, correct_option, points")
+    .in("id", questionIds)
+    .returns<Pick<QuizQuestion, "id" | "type" | "correct_option" | "points">[]>();
+  const out: Record<string, number | null> = {};
+  for (const q of data ?? []) {
+    const a = answers[q.id];
+    out[q.id] = q.type === "mcq" ? autoPoints(q, a?.selected_option ?? null) : (a?.manual_points ?? null);
+  }
+  return out;
+}

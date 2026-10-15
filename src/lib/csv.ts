@@ -2,8 +2,8 @@
 export function toCsv(header: string[], rows: (string | number | boolean | null | undefined)[][]): string {
   const cell = (v: string | number | boolean | null | undefined) => {
     const s = v === null || v === undefined ? "" : String(v);
-    // Quote when needed; neutralise leading =,+,-,@ so spreadsheets don't run it as a formula.
-    const safe = /^[=+\-@]/.test(s) ? `'${s}` : s;
+    // Quote when needed; neutralise leading =,+,-,@ (and tab/CR, which some spreadsheets skip) so they don't run it as a formula.
+    const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
     return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
   };
   return "﻿" + [header, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";

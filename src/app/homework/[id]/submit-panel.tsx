@@ -1,33 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { submitHomework } from "@/app/actions/student";
 import { Spinner } from "@/components/spinner";
 import { bigGoButtonClass } from "@/components/ui";
 import { daysLate, latePenalty, PARTS } from "@/lib/rules";
+import { ANSWER_EVENT, type AnswerEventDetail } from "./quiz";
 
 export function SubmitPanel({
   homeworkId,
   dueAt,
-  unanswered,
+  unansweredIds,
   fileCount,
   penalty,
 }: {
   homeworkId: string;
   dueAt: string;
-  unanswered: number;
+  /** Questions without an answer when the page loaded; kept current as the child answers. */
+  unansweredIds: string[];
+  /** Task files right now (the page re-renders after each upload or removal). */
   fileCount: number;
   penalty: { perDay: number; cap: number };
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unanswered, setUnanswered] = useState(() => new Set(unansweredIds));
+
+  useEffect(() => {
+    const onAnswer = (e: Event) => {
+      const { questionId, answered } = (e as CustomEvent<AnswerEventDetail>).detail;
+      setUnanswered((prev) => {
+        if (answered === !prev.has(questionId)) return prev;
+        const next = new Set(prev);
+        if (answered) next.delete(questionId);
+        else next.add(questionId);
+        return next;
+      });
+    };
+    window.addEventListener(ANSWER_EVENT, onAnswer);
+    return () => window.removeEventListener(ANSWER_EVENT, onAnswer);
+  }, []);
 
   async function handleSubmit() {
+    const missing = unanswered.size;
     const late = daysLate(new Date(dueAt), new Date());
     const lines = ["Hand in your quiz and short answer? You can't change those afterwards, but you can still add or change your task files."];
-    if (unanswered > 0) lines.push(`\nYou haven't answered ${unanswered} question${unanswered === 1 ? "" : "s"}.`);
+    if (missing > 0) lines.push(`\nYou haven't answered ${missing} question${missing === 1 ? "" : "s"}.`);
     if (fileCount === 0) lines.push(`\nYour task isn't uploaded yet. It's worth ${PARTS.task} points, so add it before your teacher marks it!`);
     if (late > 0) lines.push(`\nIt's ${late} day${late === 1 ? "" : "s"} late: you'll lose ${latePenalty(late, penalty.perDay, penalty.cap)} points.`);
     if (!confirm(lines.join(""))) return;
