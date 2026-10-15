@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { MAX_FILES } from "@/lib/rules";
 import { TaskEditor } from "./text-editor";
-import { Uploads, type UploadView } from "./uploads";
+import { Uploads, type UploadLinks, type UploadView } from "./uploads";
 
 /**
  * The task's files plus the "Write text" editor. The list comes from the server page as props; after any change
@@ -15,11 +15,13 @@ export function TaskSection({
   homeworkId,
   studentId,
   uploads,
+  links,
   locked,
 }: {
   homeworkId: string;
   studentId: string;
   uploads: UploadView[];
+  links: UploadLinks;
   locked: boolean;
 }) {
   const router = useRouter();
@@ -41,7 +43,7 @@ export function TaskSection({
           ✍️ Write text instead of uploading a file
         </button>
       )}
-      <Uploads homeworkId={homeworkId} studentId={studentId} uploads={uploads} locked={locked} refreshing={refreshing} onUploadChange={refresh} />
+      <Uploads homeworkId={homeworkId} studentId={studentId} uploads={uploads} links={links} locked={locked} refreshing={refreshing} onUploadChange={refresh} />
       {writing && !locked && (
         <TaskEditor homeworkId={homeworkId} studentId={studentId} onClose={() => setWriting(false)} onSuccess={refresh} />
       )}

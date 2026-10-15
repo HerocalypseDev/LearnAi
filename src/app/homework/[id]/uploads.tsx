@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Suspense, use, useRef, useState, type ReactNode } from "react";
 import { confirmUpload, removeUpload, requestUpload as serverRequestUpload } from "@/app/actions/student";
 import { ProgressBar, Spinner } from "@/components/spinner";
 import { checkUpload, MAX_FILES } from "@/lib/rules";
@@ -12,7 +12,20 @@ export interface UploadView {
   file_name: string;
   file_type: string | null;
   size_bytes: number;
-  link: string | null;
+  /**
+   * Signed link (1 hour) when the server sent it with the file (a fresh upload). Left out for the files the page
+   * loaded with: theirs arrive in the `links` promise, which streams in after the page.
+   */
+  link?: string | null;
+}
+
+/** Signed links by upload id, still being signed on the server when the page first renders. */
+export type UploadLinks = Promise<Record<string, string>>;
+
+/** Hands a file's link to `children` once known; suspends on the page's link promise until then. */
+function WithLink({ upload, links, children }: { upload: UploadView; links: UploadLinks; children: (link: string | null) => ReactNode }) {
+  const link = upload.link !== undefined ? upload.link : (use(links)[upload.id] ?? null);
+  return children(link);
 }
 
 interface InProgress {
@@ -49,6 +62,7 @@ export function Uploads({
   homeworkId,
   studentId,
   uploads,
+  links,
   locked,
   refreshing = false,
   onUploadChange,
@@ -56,6 +70,7 @@ export function Uploads({
   homeworkId: string;
   studentId: string;
   uploads: UploadView[];
+  links: UploadLinks;
   locked: boolean;
   /** The page is re-reading the list after a change. */
   refreshing?: boolean;
@@ -117,11 +132,11 @@ export function Uploads({
   }
 
   /** Open a written piece in the editor with its current text; saving replaces that same file. */
-  async function handleEdit(upload: UploadView) {
-    if (!upload.link) return setErrors([`Couldn't open ${upload.file_name}. Reload the page and try again.`]);
+  async function handleEdit(upload: UploadView, link: string | null) {
+    if (!link) return setErrors([`Couldn't open ${upload.file_name}. Reload the page and try again.`]);
     setOpening(upload.id);
     try {
-      const response = await fetch(upload.link, { cache: "no-store" });
+      const response = await fetch(link, { cache: "no-store" });
       if (!response.ok) throw new Error(`it didn't load (${response.status}). Reload the page and try again.`);
       setErrors([]);
       setEditingUpload({ id: upload.id, text: await response.text() });
@@ -153,41 +168,30 @@ export function Uploads({
       <ul aria-busy={refreshing} className={`space-y-2 transition-opacity ${refreshing ? "opacity-60" : ""}`}>
         {uploads.map((u) => (
           <li key={u.id} className="flex animate-pop items-center gap-3 rounded-xl border border-slate-200 bg-white p-2 transition hover:shadow-md">
-            {isImage(u) && u.link ? (
-              // eslint-disable-next-line @next/next/no-img-element -- short-lived signed link, not worth image optimisation
-              <img src={u.link} alt="" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
-            ) : (
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold uppercase text-slate-500">
-                {u.file_name.split(".").pop()?.slice(0, 4)}
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{u.file_name}</div>
-              <div className="text-xs text-slate-500">{formatSize(u.size_bytes)}</div>
-              <div className="flex gap-2">
-                {u.link && (
-                  <a href={u.link} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline">
-                    {isImage(u) || isPdf(u) ? "Preview" : "Download"}
-                  </a>
-                )}
-                {!locked && isWritingFileName(u.file_name) && (
-                  <button
-                    type="button"
-                    onClick={() => void handleEdit(u)}
-                    disabled={opening !== null || busy}
-                    className="text-xs text-indigo-600 hover:underline disabled:opacity-50"
-                  >
-                    {opening === u.id ? (
-                      <span className="inline-flex items-center gap-1">
-                        <Spinner size="sm" /> Opening…
-                      </span>
-                    ) : (
-                      "Edit"
+            <Suspense fallback={<FileDetails upload={u} link={undefined} />}>
+              <WithLink upload={u} links={links}>
+                {(link) => (
+                  <FileDetails upload={u} link={link}>
+                    {!locked && isWritingFileName(u.file_name) && (
+                      <button
+                        type="button"
+                        onClick={() => void handleEdit(u, link)}
+                        disabled={opening !== null || busy}
+                        className="text-xs text-indigo-600 hover:underline disabled:opacity-50"
+                      >
+                        {opening === u.id ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Spinner size="sm" /> Opening…
+                          </span>
+                        ) : (
+                          "Edit"
+                        )}
+                      </button>
                     )}
-                  </button>
+                  </FileDetails>
                 )}
-              </div>
-            </div>
+              </WithLink>
+            </Suspense>
             {!locked && (
               <button
                 onClick={() => handleRemove(u.id)}
@@ -275,5 +279,37 @@ export function Uploads({
         </div>
       )}
     </div>
+  );
+}
+
+/** Thumbnail, name, size and Preview / Download link of one file. `link` undefined: still being signed. */
+function FileDetails({ upload: u, link, children }: { upload: UploadView; link: string | null | undefined; children?: ReactNode }) {
+  return (
+    <>
+      {isImage(u) && link ? (
+        // eslint-disable-next-line @next/next/no-img-element -- short-lived signed link, not worth image optimisation
+        <img src={link} alt="" loading="lazy" decoding="async" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+      ) : (
+        <div
+          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold uppercase text-slate-500 ${
+            link === undefined && isImage(u) ? "animate-pulse" : ""
+          }`}
+        >
+          {u.file_name.split(".").pop()?.slice(0, 4)}
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{u.file_name}</div>
+        <div className="text-xs text-slate-500">{formatSize(u.size_bytes)}</div>
+        <div className="flex gap-2">
+          {link && (
+            <a href={link} target="_blank" rel="noreferrer" className="text-xs text-indigo-600 hover:underline">
+              {isImage(u) || isPdf(u) ? "Preview" : "Download"}
+            </a>
+          )}
+          {children}
+        </div>
+      </div>
+    </>
   );
 }
