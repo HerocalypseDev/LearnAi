@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { attendanceDateProblem, lateDaysAfterUpload, MAX_FILES } from "./rules";
+import { attendanceDateProblem, calendarDate, lateDaysAfterUpload, MAX_FILES } from "./rules";
 
 // The upload rules live twice: in the app (src/app/actions/student.ts) and in the database trigger. These checks
 // keep the SQL files in step with each other and with MAX_FILES.
@@ -57,5 +57,13 @@ describe("lateness after hand-in (task files and edited writing)", () => {
     expect(lateDaysAfterUpload(0, due, new Date("2026-10-08T09:00:00+01:00"))).toBe(1);
     expect(lateDaysAfterUpload(2, due, new Date("2026-10-08T09:00:00+01:00"))).toBe(2);
     expect(lateDaysAfterUpload(0, due, new Date("2026-10-07T20:59:00+01:00"))).toBe(0);
+  });
+});
+
+describe("calendarDate", () => {
+  it("never rolls an impossible day into the next month", () => {
+    expect(calendarDate("2026-02-31")).toBeNull();
+    expect(calendarDate("2028-02-29")?.toISOString()).toBe("2028-02-29T00:00:00.000Z");
+    expect(calendarDate("2026-2-3")).toBeNull();
   });
 });

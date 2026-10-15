@@ -202,13 +202,20 @@ export function earnedBadges(items: BadgeInput[], now: Date): Badge[] {
 
 /** Attendance is kept per class Sunday: the date must be a real calendar day and a Sunday. Null when fine. */
 export function attendanceDateProblem(date: string): string | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (!match) return "Date must look like 2026-10-04.";
-  const [y, m, d] = match.slice(1).map(Number);
-  const day = new Date(Date.UTC(y, m - 1, d));
-  if (day.getUTCFullYear() !== y || day.getUTCMonth() !== m - 1 || day.getUTCDate() !== d) return `${date} isn't a real date.`;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return "Date must look like 2026-10-04.";
+  const day = calendarDate(date);
+  if (!day) return `${date} isn't a real date.`;
   if (day.getUTCDay() !== 0) return `${date} isn't a Sunday. Attendance is recorded for the Sunday class.`;
   return null;
+}
+
+/** "2026-10-04" as a UTC-midnight Date, or null when it isn't a real calendar day (JS would roll 2026-02-31 into March). */
+export function calendarDate(date: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return null;
+  const [y, m, d] = match.slice(1).map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d));
+  return day.getUTCFullYear() === y && day.getUTCMonth() === m - 1 && day.getUTCDate() === d ? day : null;
 }
 
 // ---- Passwords ----

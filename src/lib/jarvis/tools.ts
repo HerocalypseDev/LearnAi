@@ -4,7 +4,7 @@ import { CLASS_SUNDAYS } from "../course";
 import { db } from "../db";
 import { buildCsv, EXPORT_KINDS } from "../exports";
 import { loadMarking, loadSubmissionSummaries, questionPoints, type SubmissionSummary } from "../marking";
-import { PARTS, quizTotals } from "../rules";
+import { calendarDate, DEFAULT_PENALTY, PARTS, quizTotals } from "../rules";
 import { loadStats } from "../stats";
 import { signedLinks } from "../storage";
 import { formatDateTime, isPast, toLagosInputs } from "../time";
@@ -335,9 +335,8 @@ export const TOOLS: JarvisTool[] = [
       if (student) q = q.eq("user_id", (await studentOrThrow(student)).id);
       if (event) q = q.eq("event", String(event));
       if (since) {
-        const from = /^\d{4}-\d{2}-\d{2}$/.test(String(since)) ? new Date(`${since}T00:00:00+01:00`) : null;
-        if (!from || Number.isNaN(from.getTime())) throw new ops.OpError('"since" must be a real date like 2026-10-04.');
-        q = q.gte("created_at", from.toISOString());
+        if (!calendarDate(String(since))) throw new ops.OpError('"since" must be a real date like 2026-10-04.');
+        q = q.gte("created_at", new Date(`${since}T00:00:00+01:00`).toISOString());
       }
       const { data, error } = await q.returns<
         { event: string; detail: Record<string, unknown>; device: string; browser: string; created_at: string; users: { full_name: string } | null }[]
@@ -366,8 +365,10 @@ export const TOOLS: JarvisTool[] = [
     input_schema: obj({}),
     writes: false,
     run: async () => {
-      const { data } = await db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>();
-      return data ?? { late_penalty_per_day: 10, late_penalty_cap: 50 };
+      const { data, error } = await db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>();
+      // A read that failed must not look like the defaults.
+      if (error) throw new ops.OpError(`Couldn't read the settings: ${error.message}`, 500);
+      return data ?? { late_penalty_per_day: DEFAULT_PENALTY.perDay, late_penalty_cap: DEFAULT_PENALTY.cap };
     },
   },
   {
