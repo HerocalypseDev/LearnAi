@@ -17,7 +17,7 @@ import { formatDateTime } from "@/lib/time";
 import type { Answer, Settings, StudentQuestion, Upload } from "@/lib/types";
 import { Quiz, type SavedAnswer } from "./quiz";
 import { SubmitPanel } from "./submit-panel";
-import { TaskSection } from "./task-section";
+import { HandedInNote, TaskSection } from "./task-section";
 import type { UploadView } from "./uploads";
 
 // A server component on purpose: everything below is read with the server's key, and only the props passed to the
@@ -198,13 +198,7 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
           <section className="animate-pop rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 p-5 text-center shadow-sm ring-1 ring-emerald-200">
             <p className="font-semibold text-emerald-800">✅ Quiz and short answer handed in</p>
             <p className="mt-1 text-sm text-emerald-700">
-              {grade
-                ? "Your result is above."
-                : taskLocked
-                  ? "Your teacher will share your result after the deadline."
-                  : uploadViews.length === 0
-                    ? "Your task isn't uploaded yet. Add your files above when it's ready."
-                    : "Your teacher will mark it after the deadline. You can still change your task files above."}
+              {grade ? "Your result is above." : <HandedInNote fileCount={uploadViews.length} taskLocked={taskLocked} />}
             </p>
           </section>
         ) : (

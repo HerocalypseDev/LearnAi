@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { confirmUpload, uploadTaskText } from "@/app/actions/student";
+import { confirmUpload, uploadTaskText, type UploadedFile } from "@/app/actions/student";
 import { ProgressBar, Spinner } from "@/components/spinner";
 import { loadLocalStorage, removeLocalStorage, saveLocalStorage } from "@/lib/local-storage-client";
 import { cursorAfterInsert, insertListLine, isListLine, lineAt, MAX_TEXT_LENGTH, nextListPrefix, readDraft, textProblem, writeDraft } from "@/lib/task-text";
@@ -11,7 +11,10 @@ export interface TaskEditorProps {
   /** Part of the draft key, so two children sharing a browser never see each other's draft. */
   studentId: string;
   onClose: () => void;
-  onSuccess?: () => void;
+  /** Saved: the file as the list shows it (a new Writing-N.txt, or the edited one with its new link). */
+  onSuccess?: (file: UploadedFile) => void;
+  /** The result was released meanwhile: the page re-reads itself to show the task as closed. */
+  onLocked?: () => void;
   /** Editing an existing Writing-N.txt: saving replaces that file. */
   uploadId?: string;
   initialText?: string;
@@ -43,7 +46,7 @@ function sendText(url: string, blob: Blob, onProgress: (percent: number) => void
   });
 }
 
-export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId, initialText }: TaskEditorProps) {
+export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, onLocked, uploadId, initialText }: TaskEditorProps) {
   const key = draftKey(studentId, homeworkId, uploadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   // An unsent draft wins over the stored text, as long as it was started from that same text (an edit saved later
@@ -73,7 +76,10 @@ export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId
     setProgress(0);
     try {
       const start = await uploadTaskText({ homeworkId, text, uploadId });
-      if (!start.ok) throw new Error(start.error);
+      if (!start.ok) {
+        if (start.locked) onLocked?.();
+        throw new Error(start.error);
+      }
       await sendText(start.signedUrl, new Blob([text], { type: "text/plain;charset=utf-8" }), setProgress);
       const done = await confirmUpload({
         homeworkId,
@@ -82,10 +88,13 @@ export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId
         fileType: "text/plain",
         ...(start.uploadId ? { replaceUploadId: start.uploadId } : {}),
       });
-      if (!done.ok) throw new Error(done.error);
+      if (!done.ok) {
+        if (done.locked) onLocked?.();
+        throw new Error(done.error);
+      }
       // Uploaded: the draft has done its job.
       removeLocalStorage(key);
-      onSuccess?.();
+      onSuccess?.(done.upload);
       onClose();
     } catch (err) {
       // The draft stays in this browser, so nothing typed is lost.

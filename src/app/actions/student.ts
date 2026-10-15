@@ -1,21 +1,26 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { logActivity, logActivityInBackground } from "@/lib/activity";
+import { after } from "next/server";
+import { logActivityInBackground } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { timed } from "@/lib/perf";
 import { autoPoints, checkStoredUpload, checkUpload, computeGrade, daysLate, DEFAULT_PENALTY, hasHandInContent, lateDaysAfterUpload, MAX_FILES } from "@/lib/rules";
-import { requireUser, requireUserWith } from "@/lib/session";
-import { bucket, safeFileName, uploadFolder } from "@/lib/storage";
+import { requireUserWith } from "@/lib/session";
+import { bucket, safeFileName, signedLinks, uploadFolder } from "@/lib/storage";
 import { isWritingFileName, nextTextFileName, textProblem } from "@/lib/task-text";
 import type { Grade, Homework, QuizQuestion, Settings, Submission, User, Upload } from "@/lib/types";
 
-type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
+/** `locked`: the result was released, so the page should re-read itself to show the task as closed. */
+type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string; locked?: boolean };
 
-/** Names of this submission's files, for allocating the next Writing-N.txt. */
-async function uploadNames(submissionId: string): Promise<{ id: string; file_name: string }[]> {
-  const { data } = await db().from("uploads").select("id, file_name").eq("submission_id", submissionId);
-  return data ?? [];
+/** A task file as the student's page shows it: never the storage path. `link` is a signed link valid for 1 hour. */
+export interface UploadedFile {
+  id: string;
+  file_name: string;
+  file_type: string | null;
+  size_bytes: number;
+  link: string | null;
 }
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -87,14 +92,50 @@ async function refreshSavedPenalty(submissionId: string, days: number) {
 const ALREADY_SUBMITTED = "Your quiz has already been handed in, so the answers can't be changed.";
 const TASK_LOCKED = "Your teacher has released your result, so task files can't be changed any more.";
 
+type TaskUpload = Pick<Upload, "id" | "file_name" | "file_type" | "size_bytes" | "storage_path">;
+
 /**
- * Quiz and short answers lock at hand-in, but task files stay open (they take time) until the teacher
- * releases the result. The database trigger enforces the same rule for parallel requests.
+ * The homework, and this student's submission with whether its result was released and its files, in one wave
+ * (the submission, grade and files come back as one query). Quiz and short answers lock at hand-in, but task files
+ * stay open (they take time) until the teacher releases the result; the database trigger enforces the same rule
+ * for parallel requests. `submission` is null until the student first saves or uploads something.
  */
-async function taskLocked(submissionId: string): Promise<boolean> {
-  const { data } = await db().from("grades").select("released_at").eq("submission_id", submissionId).maybeSingle<{ released_at: string | null }>();
-  return !!data?.released_at;
+async function loadTaskState(studentId: string, homeworkId: string) {
+  if (!UUID.test(homeworkId)) return { homework: null, submission: null, released: false, files: [] as TaskUpload[] };
+  const [homework, { data, error }] = await Promise.all([
+    loadHomework(homeworkId),
+    timed("action:task_state", () =>
+      db()
+        .from("submissions")
+        .select("*, grades(released_at), uploads(id, file_name, file_type, size_bytes, storage_path)")
+        .eq("homework_id", homeworkId)
+        .eq("student_id", studentId)
+        .maybeSingle<Submission & { grades: { released_at: string | null } | { released_at: string | null }[] | null; uploads: TaskUpload[] | null }>(),
+    ),
+  ]);
+  if (error) throw new Error(error.message);
+  const grade = data ? (Array.isArray(data.grades) ? data.grades[0] : data.grades) : null;
+  const submission: Submission | null = data
+    ? {
+        id: data.id,
+        homework_id: data.homework_id,
+        student_id: data.student_id,
+        status: data.status,
+        started_at: data.started_at,
+        submitted_at: data.submitted_at,
+        days_late: data.days_late,
+      }
+    : null;
+  return { homework, submission, released: !!grade?.released_at, files: data?.uploads ?? [] };
 }
+
+const toUploadedFile = (u: TaskUpload, link: string | null): UploadedFile => ({
+  id: u.id,
+  file_name: u.file_name,
+  file_type: u.file_type,
+  size_bytes: u.size_bytes,
+  link,
+});
 
 type AnswerQuestion = Pick<QuizQuestion, "id" | "version" | "type" | "options" | "correct_option" | "points">;
 
@@ -192,22 +233,18 @@ export async function requestUpload(input: {
   fileName: string;
   sizeBytes: number;
 }): Promise<Result<{ signedUrl: string; path: string }>> {
-  const student = await requireUser("student");
-  const homework = await loadHomework(input.homeworkId);
+  const [student, state] = await requireUserWith("student", (studentId) => loadTaskState(studentId, String(input.homeworkId ?? "")));
+  const { homework, released, files } = state;
   if (!homework) return { ok: false, error: "Homework not found." };
+  if (released) return { ok: false, error: TASK_LOCKED, locked: true };
+  // First thing done on this homework: create the draft so confirmUpload finds it.
+  if (!state.submission) await getOrCreateSubmission(student, homework.id);
 
-  const submission = await getOrCreateSubmission(student, homework.id);
-  if (await taskLocked(submission.id)) return { ok: false, error: TASK_LOCKED };
-
-  const { count } = await db()
-    .from("uploads")
-    .select("id", { count: "exact", head: true })
-    .eq("submission_id", submission.id);
-  const problem = checkUpload(input.fileName, input.sizeBytes, count ?? 0);
+  const problem = checkUpload(input.fileName, input.sizeBytes, files.length);
   if (problem) return { ok: false, error: problem };
 
   const path = `${uploadFolder(student.id, homework.id)}/${crypto.randomUUID()}-${safeFileName(input.fileName)}`;
-  const { data, error } = await bucket().createSignedUploadUrl(path);
+  const { data, error } = await timed("upload:sign_upload", () => bucket().createSignedUploadUrl(path));
   if (error || !data) {
     console.error("createSignedUploadUrl failed", error?.message);
     return { ok: false, error: "Couldn't start the upload. Try again." };
@@ -215,6 +252,29 @@ export async function requestUpload(input: {
   return { ok: true, signedUrl: data.signedUrl, path };
 }
 
+/**
+ * The size the storage service holds for a just-uploaded object, not what the browser said. Its listing can lag a
+ * moment behind the upload, so look a few times; null size means still unknown (the child is asked to retry).
+ */
+async function storedObject(folder: string, objectName: string) {
+  let object: { name: string; metadata?: { size?: unknown } | null } | undefined;
+  let size: number | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 300));
+    const { data: listed } = await timed("upload:storage_list", () => bucket().list(folder, { search: objectName, limit: 10 }));
+    object = listed?.find((o) => o.name === objectName);
+    const reported = object?.metadata?.size;
+    size = reported === undefined || reported === null ? null : Number(reported);
+    if (object && size !== null && Number.isFinite(size)) break;
+  }
+  return { found: !!object, size };
+}
+
+/**
+ * Records an uploaded file (or moves a written piece to its new text) and answers with the file as the page shows
+ * it, so the browser can update its list without re-reading the whole page. One wave with the user row: the
+ * homework, the submission with its release state and files, and the storage listing; then the insert.
+ */
 export async function confirmUpload(input: {
   homeworkId: string;
   path: string;
@@ -222,110 +282,111 @@ export async function confirmUpload(input: {
   fileType: string;
   /** A written piece (Writing-N.txt) being edited: the new file replaces this upload's content. */
   replaceUploadId?: string;
-}): Promise<Result> {
-  const student = await requireUser("student");
-  const homework = await loadHomework(String(input.homeworkId ?? ""));
-  if (!homework) return { ok: false, error: "Homework not found." };
+}): Promise<Result<{ upload: UploadedFile }>> {
+  const homeworkId = String(input.homeworkId ?? "");
   const path = String(input.path ?? "");
+  const [student, [state, stored]] = await requireUserWith("student", (studentId) => {
+    const folder = uploadFolder(studentId, homeworkId);
+    const objectName = path.slice(folder.length + 1);
+    const inFolder = UUID.test(homeworkId) && path.startsWith(`${folder}/`) && !!objectName && !objectName.includes("/");
+    return Promise.all([
+      loadTaskState(studentId, homeworkId),
+      inFolder ? storedObject(folder, objectName) : Promise.resolve(null),
+    ]);
+  });
+  const { homework } = state;
+  if (!homework) return { ok: false, error: "Homework not found." };
+  if (!stored) return { ok: false, error: "Upload not found." };
+  const objectName = path.slice(uploadFolder(student.id, homework.id).length + 1);
   const fileName = String(input.fileName ?? "").slice(0, 200);
   const fileType = String(input.fileType ?? "").slice(0, 100) || null;
 
-  const folder = uploadFolder(student.id, homework.id);
-  const objectName = path.slice(folder.length + 1);
-  if (!path.startsWith(`${folder}/`) || !objectName || objectName.includes("/")) {
-    return { ok: false, error: "Upload not found." };
-  }
-
-  const submission = await getOrCreateSubmission(student, homework.id);
+  // requestUpload created the draft; this is only a fallback.
+  const submission = state.submission ?? (await getOrCreateSubmission(student, homework.id));
+  const files = state.submission ? state.files : [];
 
   // Confirming the same file twice (double tap, retry) is fine and must never delete the stored file,
   // so this comes before anything below that may remove the object.
-  const { data: recorded } = await db().from("uploads").select("id").eq("storage_path", path).maybeSingle();
-  if (recorded) return { ok: true };
+  const recorded = files.find((u) => u.storage_path === path);
+  if (recorded) return { ok: true, upload: toUploadedFile(recorded, (await signedLinks([path]))[path] ?? null) };
 
-  if (await taskLocked(submission.id)) {
+  if (state.released) {
     await bucket().remove([path]);
-    return { ok: false, error: TASK_LOCKED };
+    return { ok: false, error: TASK_LOCKED, locked: true };
   }
 
   // Editing a written piece: it must be one of this submission's Writing-N.txt files.
-  let replacing: Pick<Upload, "id" | "file_name" | "storage_path"> | null = null;
+  let replacing: TaskUpload | null = null;
   if (input.replaceUploadId !== undefined) {
-    const { data } = UUID.test(String(input.replaceUploadId))
-      ? await db()
-          .from("uploads")
-          .select("id, file_name, storage_path")
-          .eq("id", String(input.replaceUploadId))
-          .eq("submission_id", submission.id)
-          .maybeSingle<Pick<Upload, "id" | "file_name" | "storage_path">>()
-      : { data: null };
-    if (!data || !isWritingFileName(data.file_name)) {
+    replacing = files.find((u) => u.id === String(input.replaceUploadId)) ?? null;
+    if (!replacing || !isWritingFileName(replacing.file_name)) {
       await bucket().remove([path]);
       return { ok: false, error: "That piece of writing wasn't found. Close the editor and try again." };
     }
-    replacing = data;
   }
 
-  // Trust the size the storage service holds, not what the browser said. Its listing can lag a moment
-  // behind the upload, so look a few times; if the size is still unknown, ask the child to retry
-  // (the file stays in storage for that retry) instead of guessing.
-  let object: { name: string; metadata?: { size?: unknown } | null } | undefined;
-  let size: number | null = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const { data: listed } = await timed("upload:storage_list", () => bucket().list(folder, { search: objectName, limit: 10 }));
-    object = listed?.find((o) => o.name === objectName);
-    const reported = object?.metadata?.size;
-    size = reported === undefined || reported === null ? null : Number(reported);
-    if (object && size !== null && Number.isFinite(size)) break;
-    if (attempt < 2) await new Promise((r) => setTimeout(r, 300));
-  }
-  if (!object) return { ok: false, error: "The upload didn't arrive. Try again." };
-
-  const existing = await uploadNames(submission.id);
+  if (!stored.found) return { ok: false, error: "The upload didn't arrive. Try again." };
+  const { size } = stored;
   // A replacement doesn't add a file, so it doesn't count against the limit.
-  const verdict = checkStoredUpload(fileName, objectName, size, replacing ? 0 : existing.length);
+  const verdict = checkStoredUpload(fileName, objectName, size, replacing ? 0 : files.length);
   if (verdict) {
     if (!verdict.retryable) await bucket().remove([path]);
     return { ok: false, error: verdict.problem };
   }
   const storedSize = size as number;
 
+  // The link the browser shows for the new file is signed alongside the write (it is only handed out if the write worked).
+  const linkPromise = signedLinks([path]);
   let error: { code?: string; message: string } | null;
-  let savedName = fileName;
+  let saved: TaskUpload;
   if (replacing) {
     // Point the row at the new file, then drop the old one. The upload trigger (004) refuses this once released.
     // Matching the old path too means two edits saved at once can't both win: the loser changes nothing.
-    savedName = replacing.file_name;
-    const res = await db()
-      .from("uploads")
-      .update({ storage_path: path, size_bytes: storedSize, file_type: fileType, uploaded_at: new Date().toISOString() })
-      .eq("id", replacing.id)
-      .eq("storage_path", replacing.storage_path)
-      .select("id");
+    const res = await timed("upload:update", () =>
+      db()
+        .from("uploads")
+        .update({ storage_path: path, size_bytes: storedSize, file_type: fileType, uploaded_at: new Date().toISOString() })
+        .eq("id", replacing.id)
+        .eq("storage_path", replacing.storage_path)
+        .select("id"),
+    );
     error = res.error;
     if (!error && !res.data?.length) {
       await bucket().remove([path]);
       return { ok: false, error: "This writing was changed somewhere else. Close the editor and open it again." };
     }
+    saved = { ...replacing, storage_path: path, size_bytes: storedSize, file_type: fileType };
   } else {
     // Two written pieces started at once (two tabs) could both be offered the same Writing-N name: re-number here.
-    if (isWritingFileName(savedName) && existing.some((u) => u.file_name === savedName)) savedName = nextTextFileName(existing);
+    let savedName = fileName;
+    if (isWritingFileName(savedName) && files.some((u) => u.file_name === savedName)) savedName = nextTextFileName(files);
     // The database is the hard gate: a trigger (supabase/schema.sql, enforce_upload_rules) locks the submission,
     // and refuses the row if the result was released or it already has MAX_FILES files, even for parallel requests.
-    ({ error } = await timed("upload:insert", () =>
-      db().from("uploads").insert({
-        submission_id: submission.id,
-        file_name: savedName,
-        file_type: fileType,
-        size_bytes: storedSize,
-        storage_path: path,
-      }),
-    ));
+    const res = await timed("upload:insert", () =>
+      db()
+        .from("uploads")
+        .insert({
+          submission_id: submission.id,
+          file_name: savedName,
+          file_type: fileType,
+          size_bytes: storedSize,
+          storage_path: path,
+        })
+        .select("id")
+        .single<{ id: string }>(),
+    );
+    error = res.error;
+    saved = { id: res.data?.id ?? "", file_name: savedName, file_type: fileType, size_bytes: storedSize, storage_path: path };
   }
   if (error) {
-    if (error.code === "23505") return { ok: true }; // this exact file was already recorded (double confirm)
+    if (error.code === "23505") {
+      // This exact file was already recorded (double confirm): answer with that row.
+      const { data: row } = await db().from("uploads").select("id, file_name, file_type, size_bytes, storage_path").eq("storage_path", path).maybeSingle<TaskUpload>();
+      if (row) return { ok: true, upload: toUploadedFile(row, (await linkPromise)[path] ?? null) };
+      return { ok: false, error: "Couldn't save the upload. Reload the page." };
+    }
     await bucket().remove([path]); // never leave a stored file that has no row
-    if (/task_locked/.test(error.message)) return { ok: false, error: TASK_LOCKED };
+    if (/task_locked/.test(error.message)) return { ok: false, error: TASK_LOCKED, locked: true };
     if (/already_submitted/.test(error.message)) {
       // The older upload trigger (002) is still installed: the teacher needs to run migration 004.
       console.error("confirmUpload: old upload trigger installed; run supabase/migrations/004_upload_rules.sql");
@@ -336,8 +397,11 @@ export async function confirmUpload(input: {
     return { ok: false, error: "Couldn't save the upload. Try again." };
   }
   if (replacing) {
-    const { error: storageError } = await bucket().remove([replacing.storage_path]);
-    if (storageError) console.error("confirmUpload: old text file not deleted", replacing.storage_path, storageError.message);
+    const oldPath = replacing.storage_path;
+    after(async () => {
+      const { error: storageError } = await bucket().remove([oldPath]);
+      if (storageError) console.error("confirmUpload: old text file not deleted", oldPath, storageError.message);
+    });
   }
 
   // A file added or changed after hand-in counts as late too if it arrives after the deadline (never reduces lateness).
@@ -349,55 +413,64 @@ export async function confirmUpload(input: {
     }
   }
 
-  await logActivity(student.id, "upload", {
+  logActivityInBackground(student.id, "upload", {
     homework_id: homework.id,
-    file_name: savedName,
+    file_name: saved.file_name,
     size_bytes: storedSize,
     ...(replacing ? { edited: true } : {}),
   });
-  revalidatePath(`/homework/${homework.id}`);
-  return { ok: true };
+  return { ok: true, upload: toUploadedFile(saved, (await linkPromise)[path] ?? null) };
 }
 
+/** Removes one of the student's own task files: the lookup checks ownership and the release in the same query. */
 export async function removeUpload(uploadId: string): Promise<Result> {
-  const student = await requireUser("student");
-  if (!UUID.test(uploadId)) return { ok: false, error: "File not found." };
-
-  const { data: upload } = await db()
-    .from("uploads")
-    .select("id, storage_path, file_name, submissions!inner(id, student_id, status, homework_id)")
-    .eq("id", uploadId)
-    .maybeSingle<{
-      id: string;
-      storage_path: string;
-      file_name: string;
-      submissions: Pick<Submission, "id" | "student_id" | "status" | "homework_id">;
-    }>();
+  const [student, upload] = await requireUserWith("student", async (studentId) => {
+    if (!UUID.test(String(uploadId))) return null;
+    const { data } = await timed("upload:find", () =>
+      db()
+        .from("uploads")
+        .select("id, storage_path, file_name, submissions!inner(id, student_id, status, homework_id, grades(released_at))")
+        .eq("id", uploadId)
+        .eq("submissions.student_id", studentId)
+        .maybeSingle<{
+          id: string;
+          storage_path: string;
+          file_name: string;
+          submissions: Pick<Submission, "id" | "student_id" | "status" | "homework_id"> & {
+            grades: { released_at: string | null } | { released_at: string | null }[] | null;
+          };
+        }>(),
+    );
+    return data;
+  });
   if (!upload || upload.submissions.student_id !== student.id) return { ok: false, error: "File not found." };
-  if (await taskLocked(upload.submissions.id)) return { ok: false, error: TASK_LOCKED };
+  const grade = Array.isArray(upload.submissions.grades) ? upload.submissions.grades[0] : upload.submissions.grades;
+  if (grade?.released_at) return { ok: false, error: TASK_LOCKED, locked: true };
 
   // Row first: if the file can't be deleted from storage afterwards it is just an unreferenced leftover,
   // whereas the other order could leave a listed file whose content is gone.
-  const { error } = await db().from("uploads").delete().eq("id", upload.id);
+  const { error } = await timed("upload:delete", () => db().from("uploads").delete().eq("id", upload.id));
   if (error) return { ok: false, error: "Couldn't remove the file. Try again." };
-  const { error: storageError } = await bucket().remove([upload.storage_path]);
-  if (storageError) console.error("removeUpload: storage delete failed", upload.storage_path, storageError.message);
+  after(async () => {
+    const { error: storageError } = await bucket().remove([upload.storage_path]);
+    if (storageError) console.error("removeUpload: storage delete failed", upload.storage_path, storageError.message);
+  });
 
-  await logActivity(student.id, "upload", {
+  logActivityInBackground(student.id, "upload", {
     homework_id: upload.submissions.homework_id,
     file_name: upload.file_name,
     removed: true,
   });
-  revalidatePath(`/homework/${upload.submissions.homework_id}`);
   return { ok: true };
 }
 
 export async function submitHomework(homeworkId: string): Promise<Result> {
-  const student = await requireUser("student");
-  const homework = await loadHomework(homeworkId);
+  const [student, [homework, { data: found }]] = await requireUserWith("student", (studentId) =>
+    Promise.all([loadHomework(homeworkId), UUID.test(homeworkId) ? findSubmission(studentId, homeworkId) : Promise.resolve({ data: null })]),
+  );
   if (!homework) return { ok: false, error: "Homework not found." };
 
-  const submission = await getOrCreateSubmission(student, homework.id);
+  const submission = found ?? (await getOrCreateSubmission(student, homework.id));
   if (submission.status === "submitted") return { ok: false, error: ALREADY_SUBMITTED };
 
   const [{ data: answerRows }, { count: fileCount }] = await Promise.all([
@@ -420,7 +493,7 @@ export async function submitHomework(homeworkId: string): Promise<Result> {
   if (error) return { ok: false, error: "Couldn't hand in. Check your internet and try again." };
   if (!updated?.length) return { ok: false, error: ALREADY_SUBMITTED };
 
-  await logActivity(student.id, "submit", { homework_id: homework.id, days_late: late });
+  logActivityInBackground(student.id, "submit", { homework_id: homework.id, days_late: late });
   revalidatePath(`/homework/${homework.id}`);
   revalidatePath("/dashboard");
   return { ok: true };
@@ -437,17 +510,16 @@ export async function uploadTaskText(input: {
   text: string;
   uploadId?: string;
 }): Promise<Result<{ signedUrl: string; path: string; fileName: string; uploadId: string | null }>> {
-  const student = await requireUser("student");
-  const homework = await loadHomework(String(input.homeworkId ?? ""));
+  const [student, state] = await requireUserWith("student", (studentId) => loadTaskState(studentId, String(input.homeworkId ?? "")));
+  const { homework, released } = state;
   if (!homework) return { ok: false, error: "Homework not found." };
   const text = typeof input.text === "string" ? input.text : "";
   const problem = textProblem(text);
   if (problem) return { ok: false, error: problem };
+  if (released) return { ok: false, error: TASK_LOCKED, locked: true };
+  if (!state.submission) await getOrCreateSubmission(student, homework.id);
 
-  const submission = await getOrCreateSubmission(student, homework.id);
-  if (await taskLocked(submission.id)) return { ok: false, error: TASK_LOCKED };
-
-  const existing = await uploadNames(submission.id);
+  const existing = state.files;
   let fileName: string;
   let uploadId: string | null = null;
   if (input.uploadId !== undefined && input.uploadId !== null) {
@@ -462,7 +534,7 @@ export async function uploadTaskText(input: {
   }
 
   const path = `${uploadFolder(student.id, homework.id)}/${crypto.randomUUID()}-${safeFileName(fileName)}`;
-  const { data, error } = await bucket().createSignedUploadUrl(path);
+  const { data, error } = await timed("upload:sign_upload", () => bucket().createSignedUploadUrl(path));
   if (error || !data) {
     console.error("createSignedUploadUrl failed", error?.message);
     return { ok: false, error: "Couldn't start the upload. Try again." };

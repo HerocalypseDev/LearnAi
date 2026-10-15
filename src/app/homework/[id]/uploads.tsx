@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, use, useRef, useState, type ReactNode } from "react";
-import { confirmUpload, removeUpload, requestUpload as serverRequestUpload } from "@/app/actions/student";
+import { confirmUpload, removeUpload, requestUpload as serverRequestUpload, type UploadedFile } from "@/app/actions/student";
 import { ProgressBar, Spinner } from "@/components/spinner";
 import { checkUpload, MAX_FILES } from "@/lib/rules";
 import { isWritingFileName } from "@/lib/task-text";
@@ -65,16 +65,23 @@ export function Uploads({
   links,
   locked,
   refreshing = false,
-  onUploadChange,
+  onAdded,
+  onReplaced,
+  onRemoved,
+  onLocked,
 }: {
   homeworkId: string;
   studentId: string;
   uploads: UploadView[];
   links: UploadLinks;
   locked: boolean;
-  /** The page is re-reading the list after a change. */
+  /** The page is re-reading itself (after the result was released). */
   refreshing?: boolean;
-  onUploadChange?: () => void;
+  onAdded: (file: UploadedFile) => void;
+  onReplaced: (file: UploadedFile) => void;
+  onRemoved: (id: string) => void;
+  /** An action said the result was released: the page re-reads itself to show the task as closed. */
+  onLocked: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [progress, setProgress] = useState<InProgress[]>([]);
@@ -90,6 +97,7 @@ export function Uploads({
     setErrors([]);
     let count = uploads.length;
     const problems: string[] = [];
+    let lockedNow = false;
 
     for (const [i, file] of list.entries()) {
       const problem = checkUpload(file.name, file.size, count);
@@ -103,12 +111,19 @@ export function Uploads({
       setProgress((p) => [...p, { key, name: file.name, percent: 0 }]);
       try {
         const start = await serverRequestUpload({ homeworkId, fileName: file.name, sizeBytes: file.size });
-        if (!start.ok) throw new Error(start.error);
+        if (!start.ok) {
+          if (start.locked) lockedNow = true;
+          throw new Error(start.error);
+        }
         await sendFile(start.signedUrl, file, (percent) =>
           setProgress((p) => p.map((x) => (x.key === key ? { ...x, percent } : x))),
         );
         const done = await confirmUpload({ homeworkId, path: start.path, fileName: file.name, fileType: file.type });
-        if (!done.ok) throw new Error(done.error);
+        if (!done.ok) {
+          if (done.locked) lockedNow = true;
+          throw new Error(done.error);
+        }
+        onAdded(done.upload);
       } catch (e) {
         count--;
         problems.push(`${file.name}: ${e instanceof Error ? e.message : "upload failed"}`);
@@ -119,7 +134,7 @@ export function Uploads({
 
     setErrors(problems);
     if (inputRef.current) inputRef.current.value = "";
-    onUploadChange?.();
+    if (lockedNow) onLocked();
   }
 
   async function handleRemove(id: string) {
@@ -128,7 +143,8 @@ export function Uploads({
     const result = await removeUpload(id);
     setRemoving(null);
     setErrors(result.ok ? [] : [result.error]);
-    onUploadChange?.();
+    if (result.ok) onRemoved(id);
+    else if (result.locked) onLocked();
   }
 
   /** Open a written piece in the editor with its current text; saving replaces that same file. */
@@ -159,7 +175,8 @@ export function Uploads({
           uploadId={editingUpload.id}
           initialText={editingUpload.text}
           onClose={() => setEditingUpload(null)}
-          onSuccess={() => onUploadChange?.()}
+          onSuccess={onReplaced}
+          onLocked={onLocked}
         />
       )}
       {uploads.length === 0 && !busy && <p className="text-sm text-slate-500">No files attached yet.</p>}
