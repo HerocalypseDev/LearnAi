@@ -118,7 +118,11 @@ export async function saveAnswer(input: {
       },
       { onConflict: "submission_id,question_id" },
     );
-  if (error) return { ok: false, error: "Couldn't save. Check your internet and try again." };
+  if (error) {
+    // The database refuses answer changes once handed in (another tab may have handed in a moment ago).
+    if (/already_submitted/.test(error.message)) return { ok: false, error: ALREADY_SUBMITTED };
+    return { ok: false, error: "Couldn't save. Check your internet and try again." };
+  }
 
   const activeMs = Math.max(0, Math.min(Math.round(input.activeMs ?? 0), 60 * 60 * 1000));
   await logActivity(student.id, "answer_change", {

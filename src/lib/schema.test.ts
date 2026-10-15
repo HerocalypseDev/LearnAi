@@ -38,6 +38,21 @@ describe("upload trigger (schema.sql and migrations)", () => {
   });
 });
 
+describe("answers trigger", () => {
+  const block = (src: string) => {
+    const start = src.indexOf("create or replace function enforce_answer_lock()");
+    const end = src.indexOf("for each row execute function enforce_answer_lock();");
+    expect(start).toBeGreaterThanOrEqual(0);
+    return src.slice(start, end).replace(/\s+/g, " ");
+  };
+  it("is the same in schema.sql and migration 004, and lets marking write points but not change answers", () => {
+    const b = block(sql("schema.sql"));
+    expect(block(sql("migrations/004_upload_rules.sql"))).toBe(b);
+    expect(b).toContain("new.answer_text is distinct from old.answer_text");
+    expect(b).not.toMatch(/manual_points|auto_points/);
+  });
+});
+
 describe("attendanceDateProblem", () => {
   it("accepts class Sundays", () => {
     expect(attendanceDateProblem("2026-10-04")).toBeNull();
