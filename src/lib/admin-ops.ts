@@ -369,8 +369,9 @@ export async function saveMarks(input: MarksInput) {
 
 export async function setAttendance(input: { studentId: string; date: unknown; present: boolean | null; note?: unknown }) {
   const date = String(input.date ?? "").trim();
+  // Clearing only needs a real date, so an old record on a wrong day can still be removed.
   const problem = attendanceDateProblem(date);
-  if (problem) throw new OpError(problem);
+  if (problem && (input.present !== null || !/isn't a Sunday/.test(problem))) throw new OpError(problem);
   const note = str(input.note)?.slice(0, 500) || null;
   const { error } =
     input.present === null

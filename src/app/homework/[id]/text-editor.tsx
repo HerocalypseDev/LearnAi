@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { confirmUpload, uploadTaskText } from "@/app/actions/student";
 import { Spinner } from "@/components/spinner";
 import { loadLocalStorage, removeLocalStorage, saveLocalStorage } from "@/lib/local-storage-client";
-import { cursorAfterInsert, insertListLine, MAX_TEXT_LENGTH, nextListPrefix, textProblem } from "@/lib/task-text";
+import { cursorAfterInsert, insertListLine, isListLine, lineAt, MAX_TEXT_LENGTH, nextListPrefix, textProblem } from "@/lib/task-text";
 
 export interface TaskEditorProps {
   homeworkId: string;
@@ -92,8 +92,7 @@ export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId
     if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
     const el = e.currentTarget;
     // Only take over Enter on list lines (continue or end the list); elsewhere the browser's own Enter is fine.
-    const lineStart = text.lastIndexOf("\n", el.selectionStart - 1) + 1;
-    if (el.selectionStart !== el.selectionEnd || !/^\s*(?:[-*]|\d+\.)\s/.test(text.slice(lineStart))) return;
+    if (el.selectionStart !== el.selectionEnd || !isListLine(lineAt(text, el.selectionStart))) return;
     e.preventDefault();
     const pos = el.selectionStart;
     const next = insertListLine(text, pos, "");

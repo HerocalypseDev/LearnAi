@@ -42,6 +42,18 @@ export function nextListPrefix(line: string): string {
   return bullet ? `${indent}${bullet} ` : `${indent}${Number.parseInt(number, 10) + 1}. `;
 }
 
+/** True when this line is a list item ("- a", "* a", "2. b", indented or not). */
+export function isListLine(line: string): boolean {
+  return LIST_LINE.test(line);
+}
+
+/** The whole line the cursor is on. */
+export function lineAt(text: string, pos: number): string {
+  const start = pos <= 0 ? 0 : text.lastIndexOf("\n", pos - 1) + 1;
+  const end = text.indexOf("\n", pos);
+  return text.slice(start, end === -1 ? text.length : end);
+}
+
 /** A list line with nothing written after its bullet or number ("- ", "3. "). */
 function isEmptyListLine(line: string): boolean {
   const match = line.match(LIST_LINE);

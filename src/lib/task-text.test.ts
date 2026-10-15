@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { appendListLine, cursorAfterInsert, insertListLine, isWritingFileName, nextListPrefix, nextTextFileName, textProblem } from "./task-text";
+import { appendListLine, cursorAfterInsert, insertListLine, isListLine, isWritingFileName, lineAt, nextListPrefix, nextTextFileName, textProblem } from "./task-text";
 
 describe("nextTextFileName", () => {
   it("returns Writing-1.txt for empty list", () => {
@@ -148,5 +148,19 @@ describe("list editing", () => {
     const before = "- a\n- ";
     const after = insertListLine(before, 6, "");
     expect(cursorAfterInsert(before, after, 6)).toBe(4);
+  });
+});
+
+describe("lineAt / isListLine (which Enter presses the editor takes over)", () => {
+  it("finds the whole line around the cursor, including at the very start", () => {
+    expect(lineAt("\n- a", 0)).toBe("");
+    expect(lineAt("one\n- two\nthree", 5)).toBe("- two");
+    expect(lineAt("abc", 3)).toBe("abc");
+  });
+  it("only list items are list lines", () => {
+    expect(isListLine("- a")).toBe(true);
+    expect(isListLine("  12. a")).toBe(true);
+    expect(isListLine("-")).toBe(false);
+    expect(isListLine("hello - world")).toBe(false);
   });
 });
