@@ -93,7 +93,8 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
     marks[a.question_id] = { selected_option: a.selected_option, manual_points: a.manual_points };
   }
   // Per-question points only once the result is visible, re-marked from the current questions like the total was.
-  const earned = grade ? await visibleQuestionPoints(quiz.map((q) => q.id), marks) : undefined;
+  // Not awaited: the page (and the total above) shows at once, and each question's points stream in after.
+  const earned = grade ? visibleQuestionPoints(quiz.map((q) => q.id), marks).catch(() => ({}) as Record<string, number | null>) : undefined;
   const unansweredIds = quiz
     .filter((q) => {
       const a = saved[q.id];
