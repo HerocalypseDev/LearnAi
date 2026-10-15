@@ -43,7 +43,7 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 4. Paste all of `supabase/storage.sql` into a new query, then click **Run**. It creates the private `uploads` storage bucket for homework files.
 5. If your database was created from an older `schema.sql`, also run `supabase/migrations/004_upload_rules.sql` (safe to run twice). It installs the current upload rules: at most 10 files even when two uploads arrive at the same moment, task files open until you release the result, edits of written pieces locked by the release too, and a handed-in quiz locked in the database itself. If you never ran `002_integrity.sql`, run it as well (it adds a unique index); 002, 003 and 004 all install the same final trigger, so their order doesn't matter. A brand-new project already gets all of this from `schema.sql`.
    Also run `supabase/migrations/005_performance.sql` on an older database (safe to run twice): it adds indexes
-   for the pages' queries. The app works without it, just a little slower as the tables grow.
+X
 6. Go to **Project Settings → API Keys** and copy the **secret** key (it starts with `sb_secret_`). Then find the **Project URL** (`https://xxxx.supabase.co`) under **Project Settings → Data API**.
 
 ### 2. Vercel (website)

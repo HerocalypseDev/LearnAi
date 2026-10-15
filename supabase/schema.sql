@@ -199,6 +199,28 @@ alter table attendance     enable row level security;
 alter table activity_log   enable row level security;
 alter table settings       enable row level security;
 
+-- Quiz time per student and homework for the teacher's overview, added up here instead of sending every
+-- answer_change row to the app (also in migrations/005_performance.sql). Only the server's key may call it (RLS would hide the rows from anyone else anyway).
+create or replace function quiz_active_ms()
+returns table (user_id uuid, homework_id text, active_ms bigint)
+language sql stable
+set search_path = public
+as $$
+  select l.user_id,
+         l.detail->>'homework_id',
+         coalesce(sum(case when jsonb_typeof(l.detail->'active_ms') = 'number' then (l.detail->>'active_ms')::numeric else 0 end), 0)::bigint
+  from activity_log l
+  where l.event = 'answer_change' and l.detail ? 'homework_id'
+  group by l.user_id, l.detail->>'homework_id';
+$$;
+revoke all on function quiz_active_ms() from public;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then revoke all on function quiz_active_ms() from anon; end if;
+  if exists (select 1 from pg_roles where rolname = 'authenticated') then revoke all on function quiz_active_ms() from authenticated; end if;
+end $$;
+grant execute on function quiz_active_ms() to service_role;
+
 -- The app's server connects with the secret (service_role) key. Grant it access
 -- explicitly in case the project doesn't expose new tables automatically.
 grant usage on schema public to service_role;
