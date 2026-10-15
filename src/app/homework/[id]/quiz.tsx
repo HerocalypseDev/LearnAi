@@ -13,7 +13,8 @@ export interface SavedAnswer {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-const TEXT_SAVE_DELAY_MS = 800;
+// Short answers save after a pause in typing (and at once on leaving the box or the page).
+const TEXT_SAVE_DELAY_MS = 1500;
 
 /** Fired on window whenever an answer changes, so the hand-in panel's "not answered yet" count stays current. */
 export const ANSWER_EVENT = "homework-answer";

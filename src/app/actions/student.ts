@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { logActivity } from "@/lib/activity";
+import { logActivity, logActivityInBackground } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { timed } from "@/lib/perf";
 import { autoPoints, checkStoredUpload, checkUpload, computeGrade, daysLate, DEFAULT_PENALTY, hasHandInContent, lateDaysAfterUpload, MAX_FILES } from "@/lib/rules";
-import { requireUser } from "@/lib/session";
+import { requireUser, requireUserWith } from "@/lib/session";
 import { bucket, safeFileName, uploadFolder } from "@/lib/storage";
 import { isWritingFileName, nextTextFileName, textProblem } from "@/lib/task-text";
 import type { Grade, Homework, QuizQuestion, Settings, Submission, User, Upload } from "@/lib/types";
@@ -35,11 +35,14 @@ async function loadHomework(homeworkId: string): Promise<Homework | null> {
  * no-op that returns nothing (Postgres waits for the winner to commit first), and the loser then reads the
  * winner's row. A plain "upsert and return" can't tell winner from loser, and only the winner may log quiz_start.
  */
+function findSubmission(studentId: string, homeworkId: string) {
+  return timed("action:submission", () =>
+    db().from("submissions").select("*").eq("homework_id", homeworkId).eq("student_id", studentId).maybeSingle<Submission>(),
+  );
+}
+
 async function getOrCreateSubmission(student: User, homeworkId: string): Promise<Submission> {
-  const find = () =>
-    timed("action:submission", () =>
-      db().from("submissions").select("*").eq("homework_id", homeworkId).eq("student_id", student.id).maybeSingle<Submission>(),
-    );
+  const find = () => findSubmission(student.id, homeworkId);
 
   const { data: existing, error: findError } = await find();
   if (findError) throw new Error(findError.message);
@@ -52,7 +55,7 @@ async function getOrCreateSubmission(student: User, homeworkId: string): Promise
     .returns<Submission[]>();
   if (error) throw new Error(error.message);
   if (inserted && inserted.length > 0) {
-    await logActivity(student.id, "quiz_start", { homework_id: homeworkId });
+    logActivityInBackground(student.id, "quiz_start", { homework_id: homeworkId });
     return inserted[0];
   }
   const { data: winner, error: readError } = await find();
@@ -93,6 +96,33 @@ async function taskLocked(submissionId: string): Promise<boolean> {
   return !!data?.released_at;
 }
 
+type AnswerQuestion = Pick<QuizQuestion, "id" | "version" | "type" | "options" | "correct_option" | "points">;
+
+/**
+ * Read side by side for saveAnswer: the question (which also proves the homework exists; its answer key stays on the
+ * server, for auto_points) and this student's submission, if there is one yet.
+ */
+async function loadAnswerTarget(
+  studentId: string,
+  homeworkId: string,
+  questionId: string,
+): Promise<{ question: AnswerQuestion | null; found: Submission | null; failed: boolean }> {
+  if (!UUID.test(homeworkId) || !UUID.test(questionId)) return { question: null, found: null, failed: false };
+  const [{ data: question }, { data: found, error }] = await Promise.all([
+    timed("autosave:question", () =>
+      db()
+        .from("quiz_questions")
+        .select("id, version, type, options, correct_option, points")
+        .eq("id", questionId)
+        .eq("homework_id", homeworkId)
+        .maybeSingle<AnswerQuestion>(),
+    ),
+    findSubmission(studentId, homeworkId),
+  ]);
+  return { question, found, failed: !!error };
+}
+
+/** Common case: one wave with the user row (question + submission), then the upsert. The activity row is written after. */
 export async function saveAnswer(input: {
   homeworkId: string;
   questionId: string;
@@ -100,18 +130,17 @@ export async function saveAnswer(input: {
   selectedOption?: number | null;
   activeMs?: number;
 }): Promise<Result> {
-  const student = await requireUser("student");
-  const homework = await loadHomework(input.homeworkId);
-  if (!homework || !UUID.test(input.questionId)) return { ok: false, error: "Homework not found." };
-
-  const { data: question } = await timed("autosave:question", () =>
-    db().from("quiz_questions").select("*").eq("id", input.questionId).eq("homework_id", homework.id).maybeSingle<QuizQuestion>(),
+  const [student, { question, found, failed }] = await requireUserWith("student", (studentId) =>
+    loadAnswerTarget(studentId, String(input.homeworkId ?? ""), String(input.questionId ?? "")),
   );
+  const homeworkId = String(input.homeworkId);
   if (!question || (question.version !== "both" && question.version !== student.version)) {
     return { ok: false, error: "Question not found." };
   }
+  if (failed) return { ok: false, error: "Couldn't save. Check your internet and try again." };
 
-  const submission = await getOrCreateSubmission(student, homework.id);
+  // First answer on this homework: the draft is created now (rare; usually the page visit's upload or a save made it).
+  const submission = found ?? (await getOrCreateSubmission(student, homeworkId));
   if (submission.status === "submitted") return { ok: false, error: ALREADY_SUBMITTED };
 
   let answerText: string | null = null;
@@ -148,8 +177,8 @@ export async function saveAnswer(input: {
   }
 
   const activeMs = Math.max(0, Math.min(Math.round(input.activeMs ?? 0), 60 * 60 * 1000));
-  await logActivity(student.id, "answer_change", {
-    homework_id: homework.id,
+  logActivityInBackground(student.id, "answer_change", {
+    homework_id: homeworkId,
     question_id: question.id,
     active_ms: activeMs,
     length: answerText?.length,
