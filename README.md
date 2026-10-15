@@ -46,6 +46,13 @@ A private homework app for a 4-week AI class with one admin (the teacher) and tw
 
 ### 2. Vercel (website)
 
+> **Regions must match.** The live Supabase project is in **Ireland (`eu-west-1`)**, so `vercel.json` pins the
+> Vercel Functions to **`dub1`** (Dublin). Every page makes several trips to the database, so a function far from
+> Supabase pays that distance on each one. If the Supabase project ever moves, change `regions` in `vercel.json`
+> to the matching Vercel region (Frankfurt `eu-central-1` → `fra1`, London `eu-west-2` → `lhr1`, Paris
+> `eu-west-3` → `cdg1`). Keep **Fluid Compute** switched on in the Vercel project (Settings → Functions); it reuses
+> warm instances, so fewer requests pay a cold start. See `docs/PERFORMANCE.md`.
+
 1. Sign up at <https://vercel.com> **with your GitHub account** and allow it to see the `LearnAi` repository.
 2. Click **Add New → Project** and import `LearnAi`.
 3. Before you click Deploy, open **Environment Variables** and add:
