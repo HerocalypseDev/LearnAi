@@ -258,13 +258,21 @@ export async function saveQuestion(input: QuestionInput): Promise<QuizQuestion &
   return data;
 }
 
-export async function deleteQuestion(id: unknown): Promise<{ homework_id: string }> {
+export async function deleteQuestion(id: unknown): Promise<{ homework_id: string; warning?: string }> {
   const questionId = assertId(id, "Question");
   const { data } = await db().from("quiz_questions").select("homework_id").eq("id", questionId).maybeSingle();
   if (!data) throw new OpError("Question not found.", 404);
+  // Saved marks include this question's points until they're saved again: say so rather than leave them quietly stale.
+  const { count: marked } = await db()
+    .from("grades")
+    .select("id, submissions!inner(homework_id)", { count: "exact", head: true })
+    .eq("submissions.homework_id", data.homework_id);
   const { error } = await db().from("quiz_questions").delete().eq("id", questionId);
   if (error) throw new OpError(error.message, 500);
-  return { homework_id: data.homework_id };
+  return {
+    homework_id: data.homework_id,
+    ...((marked ?? 0) > 0 ? { warning: `${marked} marked homework(s) still include its points. Open each and Save again to update the score.` } : {}),
+  };
 }
 
 // ---------- Marking ----------

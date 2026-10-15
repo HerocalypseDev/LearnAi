@@ -124,7 +124,7 @@ export function QuestionForm({
             formAction={deleteQuestion}
             formNoValidate
             onClick={(e) => {
-              if (!confirm("Delete this question? Any answers to it are deleted too.")) e.preventDefault();
+              if (!confirm("Delete this question? Any answers to it are deleted too. Already marked homework keeps its old score until you open it and Save again.")) e.preventDefault();
             }}
             className={dangerButtonClass}
           >
