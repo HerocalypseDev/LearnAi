@@ -29,7 +29,9 @@ own login (bcrypt + jose JWT cookie), Vitest. Deployed on Vercel.
 - Students only ever read or change their own submissions, answers and files (check `student_id` on the server).
 - All times are Africa/Lagos (fixed +01:00); use `src/lib/time.ts`.
 - Marking truth: multiple choice points are recomputed from the current `quiz_questions` (`quizScore` in `rules.ts`), never trusted from stored `auto_points`.
-- Hand-in locks the quiz and short answer only. Task files stay editable until the result is RELEASED (`taskLocked` in `student.ts`); a file added after the deadline raises `days_late` (`lateDaysAfterUpload`). Upload limits are enforced twice: in `student.ts` and by the trigger in `supabase/migrations/002_integrity.sql` + `003_task_after_handin.sql` (final version is in `schema.sql`). Keep `MAX_FILES` and the trigger's 10 in step.
+- Hand-in locks the quiz and short answer only. Task files stay editable until the result is RELEASED (`taskLocked` in `student.ts`); a file added after the deadline raises `days_late` (`lateDaysAfterUpload`). Upload limits are enforced twice: in `student.ts` and by the `enforce_upload_rules` trigger (`schema.sql`; migrations 002, 003 and 004 all install the same final version, checked by `schema.test.ts`). Keep `MAX_FILES` and the trigger's 10 in step.
+- Written pieces (`Writing-N.txt`, `src/lib/task-text.ts`): the server picks the name; editing uploads a new object and `confirmUpload({ replaceUploadId })` moves the row to it after the release check, never an in-place overwrite.
+- The student homework page (`src/app/homework/[id]/page.tsx`) is a server component. Don't turn it into a client page that loads data through a server action: every column it selects would reach the browser.
 - Text written by students is untrusted. Jarvis results that contain it use `student_*` field names and carry the untrusted note.
 - The Supabase secret key, `SESSION_SECRET` and `JARVIS_API_TOKEN` stay server-side. Never import `db()` into a client component (`server-only` guards this).
 

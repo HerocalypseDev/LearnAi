@@ -195,6 +195,19 @@ export function earnedBadges(items: BadgeInput[], now: Date): Badge[] {
   return badges;
 }
 
+// ---- Attendance ----
+
+/** Attendance is kept per class Sunday: the date must be a real calendar day and a Sunday. Null when fine. */
+export function attendanceDateProblem(date: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return "Date must look like 2026-10-04.";
+  const [y, m, d] = match.slice(1).map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d));
+  if (day.getUTCFullYear() !== y || day.getUTCMonth() !== m - 1 || day.getUTCDate() !== d) return `${date} isn't a real date.`;
+  if (day.getUTCDay() !== 0) return `${date} isn't a Sunday. Attendance is recorded for the Sunday class.`;
+  return null;
+}
+
 // ---- Passwords ----
 
 /** Kids type their password on a phone, so theirs can be short; the admin account controls everything. */

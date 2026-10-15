@@ -2,7 +2,8 @@ import "server-only";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { loadMarking } from "./marking";
-import { checkQuestionBudget, clampPoints, computeGrade, normalizeMcq, PARTS, passwordProblem, quizScore } from "./rules";
+import { attendanceDateProblem, checkQuestionBudget, clampPoints, computeGrade, normalizeMcq, PARTS, passwordProblem, quizScore } from "./rules";
+import { bucket } from "./storage";
 import { fromLagosInputs, toLagosInputs } from "./time";
 import type { Grade, Homework, QuizQuestion, User } from "./types";
 
@@ -150,8 +151,19 @@ export async function updateHomework(id: unknown, input: HomeworkInput): Promise
 
 export async function deleteHomework(id: unknown): Promise<Homework> {
   const homework = await getHomework(id);
+  // The rows cascade away with the homework, but the children's files in storage don't: note them first.
+  const { data: files } = await db()
+    .from("uploads")
+    .select("storage_path, submissions!inner(homework_id)")
+    .eq("submissions.homework_id", homework.id)
+    .returns<{ storage_path: string }[]>();
   const { error } = await db().from("homeworks").delete().eq("id", homework.id);
   if (error) throw new OpError(error.message, 500);
+  const paths = (files ?? []).map((f) => f.storage_path);
+  if (paths.length) {
+    const { error: storageError } = await bucket().remove(paths);
+    if (storageError) console.error("deleteHomework: files left in storage", homework.id, storageError.message);
+  }
   return homework;
 }
 
@@ -356,8 +368,9 @@ export async function saveMarks(input: MarksInput) {
 // ---------- Attendance ----------
 
 export async function setAttendance(input: { studentId: string; date: unknown; present: boolean | null; note?: unknown }) {
-  const date = String(input.date ?? "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new OpError("Date must look like 2026-10-04.");
+  const date = String(input.date ?? "").trim();
+  const problem = attendanceDateProblem(date);
+  if (problem) throw new OpError(problem);
   const note = str(input.note)?.slice(0, 500) || null;
   const { error } =
     input.present === null

@@ -335,8 +335,9 @@ export const TOOLS: JarvisTool[] = [
       if (student) q = q.eq("user_id", (await studentOrThrow(student)).id);
       if (event) q = q.eq("event", String(event));
       if (since) {
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(since))) throw new ops.OpError('"since" must look like 2026-10-04.');
-        q = q.gte("created_at", new Date(`${since}T00:00:00+01:00`).toISOString());
+        const from = /^\d{4}-\d{2}-\d{2}$/.test(String(since)) ? new Date(`${since}T00:00:00+01:00`) : null;
+        if (!from || Number.isNaN(from.getTime())) throw new ops.OpError('"since" must be a real date like 2026-10-04.');
+        q = q.gte("created_at", from.toISOString());
       }
       const { data, error } = await q.returns<
         { event: string; detail: Record<string, unknown>; device: string; browser: string; created_at: string; users: { full_name: string } | null }[]
@@ -423,7 +424,7 @@ export const TOOLS: JarvisTool[] = [
   {
     name: "delete_homework",
     description:
-      "Permanently delete a homework with its questions and every answer, file record and grade. Only when explicitly asked. confirm_title must exactly match the homework's title.",
+      "Permanently delete a homework with its questions and every answer, uploaded file and grade. Only when explicitly asked. confirm_title must exactly match the homework's title.",
     input_schema: obj({ homework_id: HOMEWORK_ID, confirm_title: { type: "string" } }, ["homework_id", "confirm_title"]),
     writes: true,
     run: async ({ homework_id, confirm_title }) => {

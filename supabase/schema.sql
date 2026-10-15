@@ -85,8 +85,10 @@ create table if not exists uploads (
 -- One row per stored file (a double "confirm" can't list the same file twice).
 create unique index if not exists uploads_storage_path_key on uploads (storage_path);
 
--- Serialises uploads per submission: locks the submission row, then refuses the new file if the result
--- was released (task files stay editable after hand-in until then) or it already has 10 files. Keep 10 in step with MAX_FILES in src/lib/rules.ts.
+-- Serialises uploads per submission: locks the submission row, then refuses a new file, or a written piece
+-- moved to a new file, once the result was released (task files stay editable after hand-in until then), and
+-- refuses a new file when it already has 10. Keep 10 in step with MAX_FILES in src/lib/rules.ts.
+-- The same function and trigger are in migrations 002, 003 and 004, so re-running any of them can't undo this.
 create or replace function enforce_upload_rules() returns trigger
 language plpgsql as $$
 declare
@@ -96,16 +98,19 @@ begin
   if exists (select 1 from grades where submission_id = new.submission_id and released_at is not null) then
     raise exception 'task_locked';
   end if;
-  select count(*) into file_count from uploads where submission_id = new.submission_id;
-  if file_count >= 10 then
-    raise exception 'upload_limit';
+  -- Editing a written piece moves its row to a new file (an UPDATE): that adds no file, so only new rows count.
+  if tg_op = 'INSERT' then
+    select count(*) into file_count from uploads where submission_id = new.submission_id;
+    if file_count >= 10 then
+      raise exception 'upload_limit';
+    end if;
   end if;
   return new;
 end;
 $$;
 
 drop trigger if exists uploads_rules on uploads;
-create trigger uploads_rules before insert on uploads
+create trigger uploads_rules before insert or update of storage_path on uploads
   for each row execute function enforce_upload_rules();
 
 create table if not exists grades (
