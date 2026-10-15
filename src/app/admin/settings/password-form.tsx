@@ -25,15 +25,12 @@ export function PasswordForm({ userId, label, minLength = 6 }: { userId: string;
           placeholder="New password"
           className={`min-w-0 flex-1 ${inputClass}`}
         />
-        <button
-          disabled={pending}
-          className={buttonClass}
-        >
+        <button disabled={pending} aria-busy={pending} className={buttonClass}>
           {pending ? (<><Spinner /> Saving…</>) : "Save"}
         </button>
       </div>
-      {state.ok && <p className="text-sm text-emerald-700">{state.ok}</p>}
-      {state.error && <p className="text-sm text-red-700">{state.error}</p>}
+      {state.ok && <p role="status" className="text-sm text-emerald-700">{state.ok}</p>}
+      {state.error && <p role="alert" className="text-sm text-red-700">{state.error}</p>}
     </form>
   );
 }

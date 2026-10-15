@@ -201,11 +201,15 @@ export function Quiz({
               />
             )}
 
-            {!locked && <SaveNote state={status[q.id]} />}
+            {!locked && (
+              <div aria-live="polite">
+                <SaveNote state={status[q.id]} />
+              </div>
+            )}
           </fieldset>
         );
       })}
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
     </div>
   );
 }
@@ -215,7 +219,7 @@ function SaveNote({ state }: { state?: SaveState }) {
   if (state === "saving") {
     return (
       <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
-        <Spinner className="h-3 w-3" /> Saving…
+        <Spinner size="sm" /> Saving…
       </p>
     );
   }

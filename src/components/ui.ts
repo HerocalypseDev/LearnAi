@@ -13,7 +13,9 @@ export const dangerButtonClass = `${pressable} rounded-xl bg-white px-3 py-2 tex
 const big = "w-full rounded-2xl px-4 py-3.5 text-lg font-bold text-white shadow-lg hover:shadow-xl";
 export const bigGoButtonClass = `${pressable} ${big} bg-gradient-to-r from-emerald-500 to-teal-500 shadow-emerald-500/30 hover:shadow-emerald-500/40 focus-visible:ring-emerald-300`;
 export const bigPrimaryButtonClass = `${pressable} ${big} bg-gradient-to-r from-indigo-600 to-violet-600 shadow-indigo-500/30 hover:shadow-indigo-500/40 focus-visible:ring-indigo-300`;
+/** For any <Link> holding a LinkPending/LinkArrow: dims it and ignores repeat clicks while its page loads. */
+export const linkPendingClass = "has-[[data-link-pending]]:pointer-events-none has-[[data-link-pending]]:opacity-70";
 export const cardClass = "rounded-2xl bg-white/90 p-5 shadow-sm ring-1 ring-slate-200 backdrop-blur-sm";
 /** Cards that are links: lift and glow on hover. */
 export const linkCardClass =
-  "group block rounded-2xl bg-white/90 p-4 shadow-sm ring-1 ring-slate-200 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/10 hover:ring-indigo-300 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200";
+  `group block rounded-2xl bg-white/90 p-4 shadow-sm ring-1 ring-slate-200 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/10 hover:ring-indigo-300 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200 ${linkPendingClass}`;

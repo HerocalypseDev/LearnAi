@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LinkPending } from "./navigation-progress";
+import { linkPendingClass } from "./ui";
 
 /** Admin menu with the current section highlighted. */
 export function NavLinks({ links }: { links: { href: string; label: string }[] }) {
@@ -17,13 +19,14 @@ export function NavLinks({ links }: { links: { href: string; label: string }[] }
             key={l.href}
             href={l.href}
             aria-current={active ? "page" : undefined}
-            className={`shrink-0 rounded-full px-3 py-1.5 font-medium transition duration-150 active:scale-95 ${
+            className={`inline-flex shrink-0 items-center rounded-full px-3 py-1.5 font-medium transition duration-150 active:scale-95 ${linkPendingClass} ${
               active
                 ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/25"
                 : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-700"
             }`}
           >
             {l.label}
+            <LinkPending />
           </Link>
         );
       })}

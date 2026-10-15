@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
-import { cardClass, secondaryButtonClass } from "@/components/ui";
+import { cardClass, linkPendingClass, secondaryButtonClass } from "@/components/ui";
+import { LinkPending } from "@/components/navigation-progress";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { formatDate, formatDateTime, TIME_ZONE } from "@/lib/time";
@@ -70,7 +71,7 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
     return `/admin/activity${q.size ? `?${q}` : ""}`;
   };
   const chip = (active: boolean) =>
-    `shrink-0 rounded-full px-3 py-1 text-xs font-medium ring-1 transition active:scale-95 ${active ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md ring-transparent" : "bg-white text-slate-700 ring-slate-300 hover:-translate-y-0.5 hover:bg-indigo-50 hover:ring-indigo-300"}`;
+    `inline-flex shrink-0 items-center rounded-full px-3 py-1 text-xs font-medium ring-1 transition active:scale-95 ${linkPendingClass} ${active ? "bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md ring-transparent" : "bg-white text-slate-700 ring-slate-300 hover:-translate-y-0.5 hover:bg-indigo-50 hover:ring-indigo-300"}`;
 
   return (
     <>
@@ -95,23 +96,28 @@ export default async function ActivityPage({ searchParams }: PageProps<"/admin/a
           <div className="flex gap-2 overflow-x-auto pb-1">
             <Link href={filterLink({ student: "" })} className={chip(!studentFilter)}>
               Both
+              <LinkPending />
             </Link>
             {(students ?? []).map((s) => (
               <Link key={s.id} href={filterLink({ student: s.id })} className={chip(studentFilter === s.id)}>
                 {s.full_name}
+                <LinkPending />
               </Link>
             ))}
             <Link href={filterLink({ student: "jarvis", event: "" })} className={chip(jarvisView)}>
               🤖 Jarvis
+              <LinkPending />
             </Link>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             <Link href={filterLink({ event: "" })} className={chip(!eventFilter)}>
               Everything
+              <LinkPending />
             </Link>
             {Object.entries(EVENTS).map(([key, label]) => (
               <Link key={key} href={filterLink({ event: key })} className={chip(eventFilter === key)}>
                 {label}
+                <LinkPending />
               </Link>
             ))}
           </div>

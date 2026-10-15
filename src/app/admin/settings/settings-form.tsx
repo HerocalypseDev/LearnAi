@@ -20,11 +20,11 @@ export function SettingsForm({ perDay, cap }: { perDay: number; cap: number }) {
         </label>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <button disabled={pending} className={buttonClass}>
+        <button disabled={pending} aria-busy={pending} className={buttonClass}>
           {pending ? (<><Spinner /> Saving…</>) : "Save"}
         </button>
-        {state.ok && <span className="text-sm text-emerald-700">{state.ok}</span>}
-        {state.error && <span className="text-sm text-red-700">{state.error}</span>}
+        {state.ok && <span role="status" className="text-sm text-emerald-700">{state.ok}</span>}
+        {state.error && <span role="alert" className="text-sm text-red-700">{state.error}</span>}
       </div>
     </form>
   );

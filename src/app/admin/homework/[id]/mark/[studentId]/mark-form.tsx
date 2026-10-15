@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { saveMarks, type MarkState } from "@/app/actions/marking";
 import { Spinner } from "@/components/spinner";
 import { buttonClass, dangerButtonClass, inputClass, secondaryButtonClass } from "@/components/ui";
@@ -53,7 +54,7 @@ export function MarkForm({
   /** Fingerprint of the marks this page was opened with (see gradeFingerprint). */
   expected: string;
 }) {
-  const [state, action, pending] = useActionState<MarkState, FormData>(saveMarks, {});
+  const [state, action] = useActionState<MarkState, FormData>(saveMarks, {});
   const [manual, setManual] = useState<Record<string, string>>(() =>
     Object.fromEntries(questions.filter((q) => q.type === "short").map((q) => [q.id, q.earned?.toString() ?? ""])),
   );
@@ -202,39 +203,54 @@ export function MarkForm({
             </dd>
           </div>
         </dl>
-        <div className="flex flex-wrap items-center gap-2">
-          <button name="intent" value="save" disabled={pending} className={secondaryButtonClass}>
-            Save
-          </button>
-          {released ? (
-            <>
-              <button name="intent" value="release" disabled={pending} className={buttonClass}>
-                Save &amp; keep released
-              </button>
-              <button name="intent" value="unrelease" disabled={pending} className={dangerButtonClass}>
-                Hide from child
-              </button>
-            </>
-          ) : (
-            <button name="intent" value="release" disabled={pending} className={buttonClass}>
-              Save &amp; release
-            </button>
-          )}
-          {pending && (
-            <span className="flex items-center gap-1.5 text-sm text-slate-500">
-              <Spinner /> Saving…
-            </span>
-          )}
-        </div>
+        <MarkButtons released={released} />
         <p className="text-xs text-slate-500">
           {released ? "Released. " : "Not released yet. "}
           {deadlinePassed
             ? "The deadline has passed, so a released result shows to the child straight away."
             : "Even once released, the child only sees it after the deadline."}
         </p>
-        {state.ok && <p className="text-sm font-medium text-emerald-700">{state.ok}</p>}
-        {state.error && <p className="text-sm text-red-700">{state.error}</p>}
+        {state.ok && <p role="status" className="text-sm font-medium text-emerald-700">{state.ok}</p>}
+        {state.error && <p role="alert" className="text-sm text-red-700">{state.error}</p>}
       </section>
     </form>
+  );
+}
+
+const INTENT_LABELS: Record<string, string> = { save: "Saving…", release: "Saving & releasing…", unrelease: "Hiding…" };
+
+/** Save, release and hide submit the same form; the pressed one shows its own working label and all are disabled. */
+function MarkButtons({ released }: { released: boolean }) {
+  const { pending, data } = useFormStatus();
+  const intent = pending ? String(data?.get("intent") ?? "save") : null;
+  const label = (value: string, idle: string) =>
+    intent === value ? (
+      <>
+        <Spinner /> {INTENT_LABELS[value]}
+      </>
+    ) : (
+      idle
+    );
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button name="intent" value="save" disabled={pending} aria-busy={intent === "save"} className={secondaryButtonClass}>
+        {label("save", "Save")}
+      </button>
+      {released ? (
+        <>
+          <button name="intent" value="release" disabled={pending} aria-busy={intent === "release"} className={buttonClass}>
+            {label("release", "Save & keep released")}
+          </button>
+          <button name="intent" value="unrelease" disabled={pending} aria-busy={intent === "unrelease"} className={dangerButtonClass}>
+            {label("unrelease", "Hide from child")}
+          </button>
+        </>
+      ) : (
+        <button name="intent" value="release" disabled={pending} aria-busy={intent === "release"} className={buttonClass}>
+          {label("release", "Save & release")}
+        </button>
+      )}
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
-import { cardClass } from "@/components/ui";
+import { cardClass, linkPendingClass } from "@/components/ui";
+import { LinkPending } from "@/components/navigation-progress";
 import { requireUser } from "@/lib/session";
 import { HomeworkForm } from "../homework-form";
 
@@ -11,8 +12,9 @@ export default async function NewHomeworkPage() {
     <>
       <TopBar name="Admin" home="/admin" badge="Teacher" links={ADMIN_LINKS} />
       <main className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6">
-        <Link href="/admin/homework" className="text-sm text-indigo-600 hover:underline">
+        <Link href="/admin/homework" className={`${linkPendingClass} inline-flex items-center text-sm text-indigo-600 hover:underline`}>
           ← All homework
+          <LinkPending />
         </Link>
         <h1 className="text-2xl font-bold">New homework</h1>
         <section className={cardClass}>

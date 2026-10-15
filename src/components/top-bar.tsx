@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { logout } from "@/app/actions/auth";
+import { LogoutButton } from "./logout-button";
 import { NavLinks } from "./nav-links";
-import { smallSecondaryButtonClass } from "./ui";
+import { LinkPending } from "./navigation-progress";
 
 export const ADMIN_LINKS = [
   { href: "/admin", label: "Overview" },
@@ -32,6 +33,7 @@ export function TopBar({
           <span className="hidden bg-gradient-to-r from-indigo-700 to-violet-700 bg-clip-text text-transparent sm:inline">
             AI Class Homework
           </span>
+          <LinkPending className="text-indigo-600" />
         </Link>
         <div className="flex items-center gap-3 text-sm">
           <span className="flex items-center gap-2 font-medium">
@@ -42,7 +44,7 @@ export function TopBar({
           </span>
           {badge && <span className="hidden rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 sm:inline">{badge}</span>}
           <form action={logout}>
-            <button className={smallSecondaryButtonClass}>Log out</button>
+            <LogoutButton />
           </form>
         </div>
       </div>
