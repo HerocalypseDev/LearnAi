@@ -3,6 +3,7 @@ import { Countdown } from "@/components/countdown";
 import { CourseOutline } from "@/components/course-outline";
 import { CountUp } from "@/components/count-up";
 import { Flash } from "@/components/flash";
+import { LinkArrow } from "@/components/navigation-progress";
 import { cardClass, linkCardClass } from "@/components/ui";
 import { StatusPill } from "@/components/status-pill";
 import { TopBar } from "@/components/top-bar";
@@ -172,9 +173,7 @@ function HomeworkList({
                   <div className="flex flex-col items-end gap-1 text-right">
                     <span className="flex items-center gap-2">
                       <StatusPill status={status} />
-                      <span className="text-lg text-indigo-400 transition group-hover:translate-x-1 group-hover:text-indigo-600" aria-hidden="true">
-                        →
-                      </span>
+                      <LinkArrow />
                     </span>
                     {grade && (
                       <span className="text-sm font-bold text-emerald-700">

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
-import { cardClass } from "@/components/ui";
+import { cardClass, linkPendingClass } from "@/components/ui";
+import { LinkPending } from "@/components/navigation-progress";
 import { loadMarking, questionPoints } from "@/lib/marking";
 import { requireUser } from "@/lib/session";
 import { signedLinks } from "@/lib/storage";
@@ -39,8 +40,9 @@ export default async function MarkPage({ params }: PageProps<"/admin/homework/[i
     <>
       <TopBar name="Admin" home="/admin" badge="Teacher" links={ADMIN_LINKS} />
       <main className="stagger mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
-        <Link href={`/admin/homework/${homework.id}`} className="text-sm text-indigo-600 hover:underline">
+        <Link href={`/admin/homework/${homework.id}`} className={`${linkPendingClass} inline-flex items-center text-sm text-indigo-600 hover:underline`}>
           ← {homework.title}
+          <LinkPending />
         </Link>
 
         <section className={cardClass}>

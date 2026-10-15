@@ -44,6 +44,7 @@ export function SubmitPanel({
   }, []);
 
   async function handleSubmit() {
+    if (pending) return;
     const missing = unanswered.size;
     const late = daysLate(new Date(dueAt), new Date());
     const lines = ["Hand in your quiz and short answer? You can't change those afterwards, but you can still add or change your task files."];
@@ -65,7 +66,7 @@ export function SubmitPanel({
 
   return (
     <div className="space-y-2">
-      <button onClick={handleSubmit} disabled={pending} className={bigGoButtonClass}>
+      <button onClick={handleSubmit} disabled={pending} aria-busy={pending} className={bigGoButtonClass}>
         {pending ? (
           <>
             <Spinner /> Handing in…
@@ -75,7 +76,10 @@ export function SubmitPanel({
         )}
       </button>
       <p className="text-center text-xs text-slate-500">Your answers save as you go. Hand in once your quiz and short answer are finished. Your task files can come later.</p>
-      {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      <p aria-live="polite" className="sr-only">
+        {pending ? "Handing in your quiz and short answer…" : ""}
+      </p>
+      {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
     </div>
   );
 }

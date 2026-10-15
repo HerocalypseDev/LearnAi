@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Flash } from "@/components/flash";
+import { LinkArrow, LinkPending } from "@/components/navigation-progress";
 import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
-import { buttonClass, cardClass, linkCardClass } from "@/components/ui";
+import { buttonClass, cardClass, linkCardClass, linkPendingClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
@@ -33,8 +34,9 @@ export default async function HomeworkListPage({ searchParams }: PageProps<"/adm
         <Flash done={done} />
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Homework</h1>
-          <Link href="/admin/homework/new" className={buttonClass}>
+          <Link href="/admin/homework/new" className={`${buttonClass} ${linkPendingClass}`}>
             + New homework
+            <LinkPending />
           </Link>
         </div>
 
@@ -46,13 +48,16 @@ export default async function HomeworkListPage({ searchParams }: PageProps<"/adm
               const todo = missing(h);
               return (
                 <li key={h.id}>
-                  <Link href={`/admin/homework/${h.id}`} className={linkCardClass}>
-                    <div className="text-xs font-medium text-indigo-600">Week {h.week}</div>
-                    <div className="font-semibold">{h.title}</div>
-                    <div className="text-sm text-slate-500">Due {formatDateTime(h.due_at)}</div>
-                    <div className={`mt-1 text-xs font-medium ${todo.length ? "text-amber-700" : "text-emerald-700"}`}>
-                      {todo.length ? `Still to do: ${todo.join(", ")}` : "Quiz, short answer and task ready for both ✓"}
+                  <Link href={`/admin/homework/${h.id}`} className={`${linkCardClass} flex items-start justify-between gap-3`}>
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium text-indigo-600">Week {h.week}</div>
+                      <div className="font-semibold">{h.title}</div>
+                      <div className="text-sm text-slate-500">Due {formatDateTime(h.due_at)}</div>
+                      <div className={`mt-1 text-xs font-medium ${todo.length ? "text-amber-700" : "text-emerald-700"}`}>
+                        {todo.length ? `Still to do: ${todo.join(", ")}` : "Quiz, short answer and task ready for both ✓"}
+                      </div>
                     </div>
+                    <LinkArrow />
                   </Link>
                 </li>
               );

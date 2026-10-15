@@ -2,6 +2,7 @@
 
 import { Spinner } from "@/components/spinner";
 import { useActionState, useState } from "react";
+import { useFormStatus } from "react-dom";
 import { deleteQuestion, saveQuestion, type FormState } from "@/app/actions/homework-admin";
 import { buttonClass, dangerButtonClass, inputClass } from "@/components/ui";
 import { PARTS } from "@/lib/rules";
@@ -21,7 +22,7 @@ export function QuestionForm({
   question: Draft;
   names: VersionNames;
 }) {
-  const [state, action, pending] = useActionState<FormState, FormData>(saveQuestion, {});
+  const [state, action] = useActionState<FormState, FormData>(saveQuestion, {});
   // The section decides the type: the Quiz section only adds multiple choice, the Short answer section only short answers.
   const type = question.type;
   const [options, setOptions] = useState<string[]>(question.options.length ? question.options : ["", "", "", ""]);
@@ -115,25 +116,54 @@ export function QuestionForm({
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <button disabled={pending} className={buttonClass}>
-          {pending ? (<><Spinner /> Saving…</>) : question.id ? "Save question" : "Add question"}
-        </button>
-        {question.id && (
-          <button
-            type="submit"
-            formAction={deleteQuestion}
-            formNoValidate
-            onClick={(e) => {
-              if (!confirm("Delete this question? Any answers to it are deleted too. Already marked homework keeps its old score until you open it and Save again.")) e.preventDefault();
-            }}
-            className={dangerButtonClass}
-          >
-            Delete
-          </button>
-        )}
-        {state.ok && <span className="text-sm text-emerald-700">{state.ok}</span>}
-        {state.error && <span className="text-sm text-red-700">{state.error}</span>}
+        <QuestionButtons saved={!!question.id} />
+        {state.ok && <span role="status" className="text-sm text-emerald-700">{state.ok}</span>}
+        {state.error && <span role="alert" className="text-sm text-red-700">{state.error}</span>}
       </div>
     </form>
+  );
+}
+
+/** Save and Delete share the form, so each shows its own working label (useFormStatus sees which one was pressed). */
+function QuestionButtons({ saved }: { saved: boolean }) {
+  const { pending, data } = useFormStatus();
+  const deleting = pending && data?.get("intent") === "delete";
+  return (
+    <>
+      <button name="intent" value="save" disabled={pending} aria-busy={pending && !deleting} className={buttonClass}>
+        {pending && !deleting ? (
+          <>
+            <Spinner /> Saving…
+          </>
+        ) : saved ? (
+          "Save question"
+        ) : (
+          "Add question"
+        )}
+      </button>
+      {saved && (
+        <button
+          type="submit"
+          name="intent"
+          value="delete"
+          formAction={deleteQuestion}
+          formNoValidate
+          disabled={pending}
+          aria-busy={deleting}
+          onClick={(e) => {
+            if (!confirm("Delete this question? Any answers to it are deleted too. Already marked homework keeps its old score until you open it and Save again.")) e.preventDefault();
+          }}
+          className={dangerButtonClass}
+        >
+          {deleting ? (
+            <>
+              <Spinner /> Deleting…
+            </>
+          ) : (
+            "Delete"
+          )}
+        </button>
+      )}
+    </>
   );
 }

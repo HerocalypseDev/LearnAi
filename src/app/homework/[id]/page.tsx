@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Countdown } from "@/components/countdown";
 import { StatusPill } from "@/components/status-pill";
+import { LinkPending } from "@/components/navigation-progress";
 import { TopBar } from "@/components/top-bar";
+import { linkPendingClass } from "@/components/ui";
 import { logActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { visibleQuestionPoints } from "@/lib/marking";
@@ -100,8 +102,9 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
     <>
       <TopBar name={student.full_name} home="/dashboard" />
       <main className="stagger mx-auto w-full max-w-3xl space-y-5 px-4 py-6">
-        <Link href="/dashboard" className="text-sm text-indigo-600 hover:underline">
+        <Link href="/dashboard" className={`${linkPendingClass} inline-flex items-center text-sm text-indigo-600 hover:underline`}>
           ← Back to dashboard
+          <LinkPending />
         </Link>
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">

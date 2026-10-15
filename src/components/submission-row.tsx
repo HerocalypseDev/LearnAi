@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { SubmissionSummary } from "@/lib/marking";
 import { formatDateTime, isPast } from "@/lib/time";
+import { LinkArrow } from "./navigation-progress";
 import { linkCardClass } from "./ui";
 
 /** One child's state for one homework, linking to the marking page. */
@@ -42,9 +43,7 @@ export function SubmissionRow({ item, showHomework = false }: { item: Submission
           </span>
         )}
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${status.className}`}>{status.text}</span>
-        <span className="text-indigo-400 transition group-hover:translate-x-1 group-hover:text-indigo-600" aria-hidden="true">
-          →
-        </span>
+        <LinkArrow />
       </span>
     </Link>
   );

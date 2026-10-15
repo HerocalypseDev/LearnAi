@@ -31,11 +31,11 @@ export function TaskForm({ id, a, b, notes, names }: { id: string; a: string; b:
         />
       </label>
       <div className="flex items-center gap-3">
-        <button disabled={pending} className={buttonClass}>
+        <button disabled={pending} aria-busy={pending} className={buttonClass}>
           {pending ? (<><Spinner /> Saving…</>) : "Save task"}
         </button>
-        {state.ok && <span className="text-sm text-emerald-700">{state.ok}</span>}
-        {state.error && <span className="text-sm text-red-700">{state.error}</span>}
+        {state.ok && <span role="status" className="text-sm text-emerald-700">{state.ok}</span>}
+        {state.error && <span role="alert" className="text-sm text-red-700">{state.error}</span>}
       </div>
     </form>
   );

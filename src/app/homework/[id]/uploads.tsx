@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { confirmUpload, removeUpload, requestUpload as serverRequestUpload } from "@/app/actions/student";
+import { ProgressBar, Spinner } from "@/components/spinner";
 import { checkUpload, MAX_FILES } from "@/lib/rules";
 import { isWritingFileName } from "@/lib/task-text";
 import { TaskEditor } from "./text-editor";
@@ -148,7 +149,8 @@ export function Uploads({
       )}
       {uploads.length === 0 && !busy && <p className="text-sm text-slate-500">No files attached yet.</p>}
 
-      <ul className="space-y-2">
+      {/* While the page re-reads the list, the old one stays on screen, dimmed, instead of going blank. */}
+      <ul aria-busy={refreshing} className={`space-y-2 transition-opacity ${refreshing ? "opacity-60" : ""}`}>
         {uploads.map((u) => (
           <li key={u.id} className="flex animate-pop items-center gap-3 rounded-xl border border-slate-200 bg-white p-2 transition hover:shadow-md">
             {isImage(u) && u.link ? (
@@ -175,7 +177,13 @@ export function Uploads({
                     disabled={opening !== null || busy}
                     className="text-xs text-indigo-600 hover:underline disabled:opacity-50"
                   >
-                    {opening === u.id ? "Opening…" : "Edit"}
+                    {opening === u.id ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Spinner size="sm" /> Opening…
+                      </span>
+                    ) : (
+                      "Edit"
+                    )}
                   </button>
                 )}
               </div>
@@ -183,26 +191,30 @@ export function Uploads({
             {!locked && (
               <button
                 onClick={() => handleRemove(u.id)}
-                disabled={removing === u.id || busy}
-                className="rounded-lg px-2 py-1 text-sm font-medium text-red-700 transition hover:bg-red-50 active:scale-95 disabled:opacity-50"
+                disabled={removing !== null || busy}
+                aria-busy={removing === u.id}
+                className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium text-red-700 transition hover:bg-red-50 active:scale-95 disabled:opacity-50"
               >
-                {removing === u.id ? "Removing…" : "Remove"}
+                {removing === u.id ? (
+                  <>
+                    <Spinner size="sm" /> Removing…
+                  </>
+                ) : (
+                  "Remove"
+                )}
               </button>
             )}
           </li>
         ))}
         {progress.map((p) => (
           <li key={p.key} className="animate-fade-up rounded-xl border border-indigo-200 bg-white p-3">
-            <div className="mb-1 truncate text-sm">Uploading {p.name}…</div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all" style={{ width: `${p.percent}%` }} />
-            </div>
+            <ProgressBar percent={p.percent} label={`Uploading ${p.name}…`} />
           </li>
         ))}
       </ul>
 
       {errors.length > 0 && (
-        <ul className="space-y-1 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+        <ul role="alert" className="space-y-1 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
           {errors.map((e) => (
             <li key={e}>{e}</li>
           ))}
@@ -236,11 +248,25 @@ export function Uploads({
               dragging
                 ? "scale-[1.02] border-indigo-500 bg-indigo-50 shadow-lg"
                 : "border-indigo-200 bg-indigo-50/40 hover:-translate-y-0.5 hover:border-indigo-400 hover:bg-indigo-50 hover:shadow-md"
-            } active:scale-[0.99] ${full || busy ? "pointer-events-none opacity-50" : ""}`}
+            } active:scale-[0.99] ${busy ? "pointer-events-none opacity-70" : full ? "pointer-events-none opacity-50" : ""}`}
+            aria-busy={busy}
+            aria-disabled={busy || full}
           >
-            <span className={`text-3xl transition ${dragging ? "animate-wiggle" : ""}`}>{dragging ? "📥" : "📎"}</span>
-            <span className="font-semibold text-indigo-700">{dragging ? "Drop it here!" : "Tap to attach files"}</span>
-            <span className="hidden text-xs text-slate-500 sm:block">or drag them into this box</span>
+            {busy ? (
+              <>
+                <Spinner size="lg" className="my-1 text-indigo-600" />
+                <span aria-live="polite" className="font-semibold text-indigo-700">
+                  {progress.length > 0 ? "Uploading…" : "Updating your files…"}
+                </span>
+                <span className="hidden text-xs text-slate-500 sm:block">You can attach more when this finishes</span>
+              </>
+            ) : (
+              <>
+                <span className={`text-3xl transition ${dragging ? "animate-wiggle" : ""}`}>{dragging ? "📥" : "📎"}</span>
+                <span className="font-semibold text-indigo-700">{dragging ? "Drop it here!" : "Tap to attach files"}</span>
+                <span className="hidden text-xs text-slate-500 sm:block">or drag them into this box</span>
+              </>
+            )}
           </label>
           <p className="mt-2 text-xs text-slate-500">
             Documents, pictures, PDFs, Scratch projects… up to 20MB each, {MAX_FILES} files max. Program files (.exe, .apk…) aren&apos;t

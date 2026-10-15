@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { confirmUpload, uploadTaskText } from "@/app/actions/student";
-import { Spinner } from "@/components/spinner";
+import { ProgressBar, Spinner } from "@/components/spinner";
 import { loadLocalStorage, removeLocalStorage, saveLocalStorage } from "@/lib/local-storage-client";
 import { cursorAfterInsert, insertListLine, isListLine, lineAt, MAX_TEXT_LENGTH, nextListPrefix, readDraft, textProblem, writeDraft } from "@/lib/task-text";
 
@@ -22,6 +22,9 @@ export function draftKey(studentId: string, homeworkId: string, uploadId?: strin
   return `task-text-${studentId}-${homeworkId}${uploadId ? `-${uploadId}` : ""}`;
 }
 
+/** A piece of writing is small; if the network goes quiet for this long, stop and let the child try again. */
+const TEXT_UPLOAD_TIMEOUT_MS = 60_000;
+
 /** PUT the text to Supabase's signed upload URL (always a new object: edits never overwrite in place). */
 function sendText(url: string, blob: Blob, onProgress: (percent: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -31,6 +34,8 @@ function sendText(url: string, blob: Blob, onProgress: (percent: number) => void
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
     xhr.onerror = () => reject(new Error("Upload failed. Check your internet."));
+    xhr.timeout = TEXT_UPLOAD_TIMEOUT_MS;
+    xhr.ontimeout = () => reject(new Error("Upload took too long. Check your internet and try again."));
     const body = new FormData();
     body.append("cacheControl", "3600");
     body.append("", blob);
@@ -46,7 +51,7 @@ export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId
   const [text, setTextState] = useState(() => readDraft(loadLocalStorage(key), initialText ?? "") ?? initialText ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [progress, setProgress] = useState("");
+  const [progress, setProgress] = useState<number | null>(null);
   const tooLong = text.length > MAX_TEXT_LENGTH;
 
   function setText(value: string) {
@@ -65,10 +70,11 @@ export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId
     if (problem) return setError(problem);
     setSaving(true);
     setError(null);
+    setProgress(0);
     try {
       const start = await uploadTaskText({ homeworkId, text, uploadId });
       if (!start.ok) throw new Error(start.error);
-      await sendText(start.signedUrl, new Blob([text], { type: "text/plain;charset=utf-8" }), (percent) => setProgress(`${percent}%`));
+      await sendText(start.signedUrl, new Blob([text], { type: "text/plain;charset=utf-8" }), setProgress);
       const done = await confirmUpload({
         homeworkId,
         path: start.path,
@@ -85,7 +91,7 @@ export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId
       // The draft stays in this browser, so nothing typed is lost.
       setError(err instanceof Error ? err.message : "Upload failed. Try again.");
       setSaving(false);
-      setProgress("");
+      setProgress(null);
     }
   }
 
@@ -168,8 +174,16 @@ export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId
           </span>
         </div>
 
-        {error && <p className="shrink-0 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        {progress && <div className="shrink-0 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-700">Uploading: {progress}</div>}
+        {error && (
+          <p role="alert" className="shrink-0 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+            {error}
+          </p>
+        )}
+        {progress !== null && (
+          <div className="shrink-0 rounded-lg bg-indigo-50 px-3 py-2 text-indigo-700">
+            <ProgressBar percent={progress} label={uploadId ? "Saving your changes…" : "Uploading your writing…"} />
+          </div>
+        )}
 
         <div className="flex shrink-0 items-center justify-between gap-2">
           <p className="text-xs text-slate-500">Your writing is kept on this device until you upload it.</p>
@@ -186,9 +200,18 @@ export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId
               type="button"
               onClick={() => void handleUpload()}
               disabled={saving || !text.trim() || tooLong}
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-busy={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {saving ? <Spinner /> : uploadId ? "Save changes" : "Upload task"}
+              {saving ? (
+                <>
+                  <Spinner /> {uploadId ? "Saving…" : "Uploading…"}
+                </>
+              ) : uploadId ? (
+                "Save changes"
+              ) : (
+                "Upload task"
+              )}
             </button>
           </span>
         </div>
