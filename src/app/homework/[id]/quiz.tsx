@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, use, useEffect, useRef, useState } from "react";
 import { saveAnswer } from "@/app/actions/student";
 import { Spinner } from "@/components/spinner";
 import { inputClass } from "@/components/ui";
@@ -13,7 +13,8 @@ export interface SavedAnswer {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-const TEXT_SAVE_DELAY_MS = 800;
+// Short answers save after a pause in typing (and at once on leaving the box or the page).
+const TEXT_SAVE_DELAY_MS = 1500;
 
 /** Fired on window whenever an answer changes, so the hand-in panel's "not answered yet" count stays current. */
 export const ANSWER_EVENT = "homework-answer";
@@ -44,8 +45,8 @@ export function Quiz({
   questions: StudentQuestion[];
   initial: Record<string, SavedAnswer>;
   locked: boolean;
-  /** Points per question, only passed once results are visible. */
-  earned?: Record<string, number | null>;
+  /** Points per question, only passed once results are visible (still being worked out when the page first shows). */
+  earned?: Promise<Record<string, number | null>>;
 }) {
   const [answers, setAnswers] = useState(initial);
   const [status, setStatus] = useState<Record<string, SaveState>>({});
@@ -117,7 +118,6 @@ export function Quiz({
     <div className="space-y-4">
       {questions.map((q, i) => {
         const value = answers[q.id] ?? { answer_text: null, selected_option: null };
-        const points = earned?.[q.id];
         const options = Array.isArray(q.options) ? q.options : [];
         return (
           <fieldset
@@ -142,7 +142,10 @@ export function Quiz({
               <span className="shrink-0 text-xs text-slate-500">
                 {earned ? (
                   <span className="font-semibold text-emerald-700">
-                    {points ?? "–"} / {q.points}
+                    <Suspense fallback="–">
+                      <EarnedPoints earned={earned} questionId={q.id} />
+                    </Suspense>{" "}
+                    / {q.points}
                   </span>
                 ) : (
                   `${q.points} pts`
@@ -212,6 +215,10 @@ export function Quiz({
       {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
     </div>
   );
+}
+
+function EarnedPoints({ earned, questionId }: { earned: Promise<Record<string, number | null>>; questionId: string }) {
+  return use(earned)[questionId] ?? "–";
 }
 
 function SaveNote({ state }: { state?: SaveState }) {

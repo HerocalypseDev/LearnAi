@@ -7,6 +7,7 @@ import { Spinner } from "@/components/spinner";
 import { bigGoButtonClass } from "@/components/ui";
 import { daysLate, latePenalty, PARTS } from "@/lib/rules";
 import { ANSWER_EVENT, type AnswerEventDetail } from "./quiz";
+import { FILES_EVENT, type FilesEventDetail } from "./task-section";
 
 export function SubmitPanel({
   homeworkId,
@@ -19,7 +20,7 @@ export function SubmitPanel({
   dueAt: string;
   /** Questions without an answer when the page loaded; kept current as the child answers. */
   unansweredIds: string[];
-  /** Task files right now (the page re-renders after each upload or removal). */
+  /** Task files when the page loaded; kept current as files are added or removed. */
   fileCount: number;
   penalty: { perDay: number; cap: number };
 }) {
@@ -27,6 +28,7 @@ export function SubmitPanel({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unanswered, setUnanswered] = useState(() => new Set(unansweredIds));
+  const [files, setFiles] = useState(fileCount);
 
   useEffect(() => {
     const onAnswer = (e: Event) => {
@@ -39,8 +41,13 @@ export function SubmitPanel({
         return next;
       });
     };
+    const onFiles = (e: Event) => setFiles((e as CustomEvent<FilesEventDetail>).detail.count);
     window.addEventListener(ANSWER_EVENT, onAnswer);
-    return () => window.removeEventListener(ANSWER_EVENT, onAnswer);
+    window.addEventListener(FILES_EVENT, onFiles);
+    return () => {
+      window.removeEventListener(ANSWER_EVENT, onAnswer);
+      window.removeEventListener(FILES_EVENT, onFiles);
+    };
   }, []);
 
   async function handleSubmit() {
@@ -49,7 +56,7 @@ export function SubmitPanel({
     const late = daysLate(new Date(dueAt), new Date());
     const lines = ["Hand in your quiz and short answer? You can't change those afterwards, but you can still add or change your task files."];
     if (missing > 0) lines.push(`\nYou haven't answered ${missing} question${missing === 1 ? "" : "s"}.`);
-    if (fileCount === 0) lines.push(`\nYour task isn't uploaded yet. It's worth ${PARTS.task} points, so add it before your teacher marks it!`);
+    if (files === 0) lines.push(`\nYour task isn't uploaded yet. It's worth ${PARTS.task} points, so add it before your teacher marks it!`);
     if (late > 0) lines.push(`\nIt's ${late} day${late === 1 ? "" : "s"} late: you'll lose ${latePenalty(late, penalty.perDay, penalty.cap)} points.`);
     if (!confirm(lines.join(""))) return;
 

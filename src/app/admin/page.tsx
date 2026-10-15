@@ -1,9 +1,8 @@
 import { GroupedColumns } from "@/components/grouped-columns";
 import { SubmissionRow } from "@/components/submission-row";
 import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
-import { loadSubmissionSummaries } from "@/lib/marking";
 import { requireUser } from "@/lib/session";
-import { loadStats, type StudentStats } from "@/lib/stats";
+import { loadOverview, type StudentStats } from "@/lib/stats";
 import { formatDateTime } from "@/lib/time";
 
 // Fixed per child (by version), never by rank. Validated as a pair for colour-blind separation.
@@ -11,7 +10,8 @@ const SERIES_COLORS = ["#2a78d6", "#eb6834"];
 
 export default async function AdminPage() {
   await requireUser("admin");
-  const [summaries, stats] = await Promise.all([loadSubmissionSummaries(), loadStats()]);
+  // One wave: each table read once, shared by the marking queue and the per-student stats.
+  const { summaries, stats } = await loadOverview();
   const toMark = summaries.filter((s) => s.submission?.status === "submitted" && !s.grade?.released_at);
   const categories = stats.homeworks.map((h, i) => `HW${i + 1}`);
   const color = (i: number) => SERIES_COLORS[i] ?? "#6b7280";

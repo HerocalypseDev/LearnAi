@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { NavigationProgress } from "@/components/navigation-progress";
 import "./globals.css";
 
@@ -23,6 +24,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <NavigationProgress>{children}</NavigationProgress>
+        <SpeedInsights />
       </body>
     </html>
   );

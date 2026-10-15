@@ -5,18 +5,19 @@ import { StatusPill } from "@/components/status-pill";
 import { LinkPending } from "@/components/navigation-progress";
 import { TopBar } from "@/components/top-bar";
 import { linkPendingClass } from "@/components/ui";
-import { logActivity } from "@/lib/activity";
+import { logActivityInBackground } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { visibleQuestionPoints } from "@/lib/marking";
+import { timed } from "@/lib/perf";
 import { DEFAULT_PENALTY, PARTS } from "@/lib/rules";
-import { requireUser } from "@/lib/session";
-import { signedLinks } from "@/lib/storage";
+import { requireUserWith } from "@/lib/session";
+import { signedPreviewLinks } from "@/lib/storage";
 import { loadStudentHomework } from "@/lib/student-data";
 import { formatDateTime } from "@/lib/time";
-import type { Answer, Settings, StudentQuestion, Upload } from "@/lib/types";
+import type { Answer, PreviewLinks, Settings, StudentQuestion, Upload } from "@/lib/types";
 import { Quiz, type SavedAnswer } from "./quiz";
 import { SubmitPanel } from "./submit-panel";
-import { TaskSection } from "./task-section";
+import { HandedInNote, TaskSection } from "./task-section";
 import type { UploadView } from "./uploads";
 
 // A server component on purpose: everything below is read with the server's key, and only the props passed to the
@@ -24,59 +25,67 @@ import type { UploadView } from "./uploads";
 // before release, the teacher's marking notes or the student's own user row.
 export default async function HomeworkPage({ params }: PageProps<"/homework/[id]">) {
   const { id } = await params;
-  const student = await requireUser("student");
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
 
-  const [item] = await loadStudentHomework(student.id, id);
+  // One wave after the cookie check: the user row and everything this page reads, side by side. Answers and uploads
+  // are reached through the student's own submission (inner join on student_id), so they don't wait for it.
+  const [student, [[item], { data: questions }, { data: answers }, { data: uploads }, { data: settings }]] = await requireUserWith(
+    "student",
+    (studentId) =>
+      Promise.all([
+        loadStudentHomework(studentId, id),
+        timed("homework:questions", () =>
+          db()
+            .from("quiz_questions")
+            // Explicit columns: this goes to the browser. Both versions are read here (the user row isn't known yet)
+            // and the other version's questions are dropped below, before anything reaches the browser.
+            .select("id, version, type, prompt, options, points, position")
+            .eq("homework_id", id)
+            .order("position")
+            .order("id")
+            .returns<StudentQuestion[]>(),
+        ),
+        timed("homework:answers", () =>
+          db()
+            .from("answers")
+            .select("question_id, answer_text, selected_option, manual_points, submissions!inner(student_id)")
+            .eq("submissions.student_id", studentId)
+            .eq("submissions.homework_id", id)
+            .returns<Pick<Answer, "question_id" | "answer_text" | "selected_option" | "manual_points">[]>(),
+        ),
+        timed("homework:uploads", () =>
+          db()
+            .from("uploads")
+            .select("id, file_name, file_type, size_bytes, storage_path, uploaded_at, submissions!inner(student_id)")
+            .eq("submissions.student_id", studentId)
+            .eq("submissions.homework_id", id)
+            .order("uploaded_at")
+            .order("id")
+            .returns<Omit<Upload, "submission_id">[]>(),
+        ),
+        timed("homework:settings", () =>
+          db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>(),
+        ),
+      ]),
+  );
   if (!item) notFound();
-  const { homework, status, grade, submission } = item;
+  const { homework, status, grade, submission, released } = item;
 
-  const [{ data: questions }, { data: answers }, { data: uploads }, { data: settings }, { data: released }] = await Promise.all([
-    db()
-      .from("quiz_questions")
-      // Explicit columns: this goes to the browser.
-      .select("id, version, type, prompt, options, points, position")
-      .eq("homework_id", id)
-      .in("version", ["both", student.version ?? "A"])
-      .order("position")
-      .order("id")
-      .returns<StudentQuestion[]>(),
-    submission
-      ? db()
-          .from("answers")
-          .select("question_id, answer_text, selected_option, manual_points")
-          .eq("submission_id", submission.id)
-          .returns<Pick<Answer, "question_id" | "answer_text" | "selected_option" | "manual_points">[]>()
-      : Promise.resolve({ data: [] as Pick<Answer, "question_id" | "answer_text" | "selected_option" | "manual_points">[] }),
-    submission
-      ? db()
-          .from("uploads")
-          .select("id, file_name, file_type, size_bytes, storage_path, uploaded_at")
-          .eq("submission_id", submission.id)
-          .order("uploaded_at")
-          .order("id")
-          .returns<Omit<Upload, "submission_id">[]>()
-      : Promise.resolve({ data: [] as Omit<Upload, "submission_id">[] }),
-    db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>(),
-    // Only whether the result was released (task files lock then), never the marks themselves: the grade above is
-    // null until the child may see it, but the lock must follow the release even before the deadline.
-    submission
-      ? db().from("grades").select("released_at").eq("submission_id", submission.id).maybeSingle<{ released_at: string | null }>()
-      : Promise.resolve({ data: null }),
-    logActivity(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id }),
-  ]);
+  logActivityInBackground(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id });
 
-  const quiz = (questions ?? []).map((q) => ({ ...q, options: Array.isArray(q.options) ? q.options.map(String) : [] }));
+  const version = student.version ?? "A";
+  const quiz = (questions ?? []).filter((q) => q.version === "both" || q.version === version).map((q) => ({ ...q, options: Array.isArray(q.options) ? q.options.map(String) : [] }));
   const mcq = quiz.filter((q) => q.type === "mcq");
   const short = quiz.filter((q) => q.type === "short");
-  const links = await signedLinks((uploads ?? []).map((u) => u.storage_path));
   const uploadViews: UploadView[] = (uploads ?? []).map((u) => ({
     id: u.id,
     file_name: u.file_name,
     file_type: u.file_type,
     size_bytes: u.size_bytes,
-    link: links[u.storage_path] ?? null,
   }));
+  // Signing the file links is a Storage call: it isn't awaited here, so the quiz renders without waiting for it.
+  // The promise streams to the browser and each file's Preview / Edit appears once it settles (uploads.tsx).
+  const links = linksById(uploads ?? []);
   const saved: Record<string, SavedAnswer> = {};
   const marks: Record<string, { selected_option: number | null; manual_points: number | null }> = {};
   for (const a of answers ?? []) {
@@ -84,7 +93,8 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
     marks[a.question_id] = { selected_option: a.selected_option, manual_points: a.manual_points };
   }
   // Per-question points only once the result is visible, re-marked from the current questions like the total was.
-  const earned = grade ? await visibleQuestionPoints(quiz.map((q) => q.id), marks) : undefined;
+  // Not awaited: the page (and the total above) shows at once, and each question's points stream in after.
+  const earned = grade ? visibleQuestionPoints(quiz.map((q) => q.id), marks).catch(() => ({}) as Record<string, number | null>) : undefined;
   const unansweredIds = quiz
     .filter((q) => {
       const a = saved[q.id];
@@ -94,7 +104,7 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
 
   // Quiz and short answer lock at hand-in; task files stay open until the teacher releases the result.
   const locked = submission?.status === "submitted";
-  const taskLocked = !!released?.released_at;
+  const taskLocked = released;
   const instructions = student.version === "B" ? homework.instructions_b : homework.instructions_a;
   const isOpen = status === "upcoming" || status === "in_progress";
 
@@ -182,20 +192,14 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
               {" Files added or changed after the deadline count as late."}
             </p>
           )}
-          <TaskSection homeworkId={id} studentId={student.id} uploads={uploadViews} locked={taskLocked} />
+          <TaskSection homeworkId={id} studentId={student.id} uploads={uploadViews} links={links} locked={taskLocked} />
         </section>
 
         {locked ? (
           <section className="animate-pop rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 p-5 text-center shadow-sm ring-1 ring-emerald-200">
             <p className="font-semibold text-emerald-800">✅ Quiz and short answer handed in</p>
             <p className="mt-1 text-sm text-emerald-700">
-              {grade
-                ? "Your result is above."
-                : taskLocked
-                  ? "Your teacher will share your result after the deadline."
-                  : uploadViews.length === 0
-                    ? "Your task isn't uploaded yet. Add your files above when it's ready."
-                    : "Your teacher will mark it after the deadline. You can still change your task files above."}
+              {grade ? "Your result is above." : <HandedInNote fileCount={uploadViews.length} taskLocked={taskLocked} />}
             </p>
           </section>
         ) : (
@@ -213,6 +217,16 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
       </main>
     </>
   );
+}
+
+/** Signed links by upload id (never the storage paths), for the browser. */
+async function linksById(uploads: Pick<Upload, "id" | "storage_path" | "file_name">[]): Promise<Record<string, PreviewLinks>> {
+  if (uploads.length === 0) return {};
+  // signedPreviewLinks reports its own errors; this also keeps a thrown network error from breaking the page.
+  const byPath = await signedPreviewLinks(uploads).catch(() => ({}) as Record<string, PreviewLinks>);
+  const out: Record<string, PreviewLinks> = {};
+  for (const u of uploads) if (byPath[u.storage_path]) out[u.id] = byPath[u.storage_path];
+  return out;
 }
 
 function PartHeading({ part, title, points }: { part: number; title: string; points: number }) {

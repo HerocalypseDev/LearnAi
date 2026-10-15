@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gradeFingerprint, missingSetup, autoPoints, checkUpload, clampPoints, computeGrade, earnedBadges, quizTotals, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
+import { canThumbnail, gradeFingerprint, missingSetup, autoPoints, checkUpload, clampPoints, computeGrade, earnedBadges, quizTotals, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
 import { fromLagosInputs, toLagosInputs } from "./time";
 
 // Wednesday 7 Oct 2026, 21:00 in Lagos (UTC+1) = 20:00 UTC.
@@ -199,5 +199,12 @@ describe("gradeFingerprint", () => {
   });
   it("has a value for not marked yet", () => {
     expect(gradeFingerprint(null)).toBe("none");
+  });
+});
+
+describe("canThumbnail", () => {
+  it("is true for pictures browsers can draw, false for everything else", () => {
+    for (const name of ["a.png", "B.JPG", "c.jpeg", "d.webp", "e.gif"]) expect(canThumbnail(name), name).toBe(true);
+    for (const name of ["a.pdf", "b.sb3", "Writing-1.txt", "c.heic", "png"]) expect(canThumbnail(name), name).toBe(false);
   });
 });

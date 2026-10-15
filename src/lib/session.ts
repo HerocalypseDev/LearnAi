@@ -3,6 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "./db";
+import { timed } from "./perf";
 import {
   passwordVersion,
   SESSION_COOKIE,
@@ -30,20 +31,52 @@ export async function deleteSession() {
   (await cookies()).delete(SESSION_COOKIE);
 }
 
-/** The logged-in user, or null. Cached for the duration of one request. */
-export const getCurrentUser = cache(async (): Promise<User | null> => {
+/** The correctly signed, unexpired session cookie's payload, or null. No database check: see getCurrentUser. */
+const sessionPayload = cache(async () => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!token) return null;
-  const payload = await verifySessionToken(token);
-  if (!payload) return null;
-  const { data } = await db().from("users").select("*").eq("id", payload.uid).maybeSingle<User>();
-  if (!data || !sessionMatchesPassword(payload, data.password_hash)) return null;
-  return data;
+  return token ? verifySessionToken(token) : null;
 });
 
-export async function requireUser(role: Role): Promise<User> {
+/** What pages and actions know about the logged-in user. Never the password hash. */
+export type SessionUser = Pick<User, "id" | "full_name" | "username" | "role" | "version">;
+
+/**
+ * The logged-in user, or null. Cached for the duration of one request. Still one database read per request: it is
+ * what makes a password change (or a deleted account) sign out every old session at once.
+ */
+export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
+  const payload = await sessionPayload();
+  if (!payload) return null;
+  const { data } = await timed("auth:user", () =>
+    db()
+      .from("users")
+      .select("id, full_name, username, role, version, password_hash")
+      .eq("id", payload.uid)
+      .maybeSingle<SessionUser & Pick<User, "password_hash">>(),
+  );
+  if (!data || !sessionMatchesPassword(payload, data.password_hash)) return null;
+  return { id: data.id, full_name: data.full_name, username: data.username, role: data.role, version: data.version };
+});
+
+export async function requireUser(role: Role): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role !== role) redirect(user.role === "admin" ? "/admin" : "/dashboard");
   return user;
+}
+
+/**
+ * requireUser(role), with `load(userId)` started at the same time instead of after it: saves one database round
+ * trip per page. `load` gets the id from the signed cookie before the user row is checked, so its result is only
+ * handed back once requireUser has passed for that same id (a failed check redirects and the data is dropped).
+ * Use it only for reads scoped to that id.
+ */
+export async function requireUserWith<T>(role: Role, load: (userId: string) => Promise<T>): Promise<[SessionUser, T]> {
+  const payload = await sessionPayload();
+  if (!payload) redirect("/login");
+  const [user, data] = await Promise.allSettled([requireUser(role), load(payload.uid)]);
+  if (user.status === "rejected") throw user.reason; // the redirect to /login or the user's own home
+  if (user.value.id !== payload.uid) redirect("/login");
+  if (data.status === "rejected") throw data.reason;
+  return [user.value, data.value];
 }

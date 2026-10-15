@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { timed } from "./perf";
 import { autoPoints, DEFAULT_PENALTY } from "./rules";
 import type { Answer, Grade, Homework, QuizQuestion, Settings, Submission, Upload, User } from "./types";
 
@@ -93,6 +94,30 @@ export interface SubmissionSummary {
   grade: Pick<Grade, "final_points" | "released_at" | "marked_by"> | null;
 }
 
+export type SummaryHomework = SubmissionSummary["homework"];
+export type SummaryStudent = SubmissionSummary["student"];
+export type SummarySubmission = NonNullable<SubmissionSummary["submission"]> & { homework_id: string; student_id: string };
+export type SummaryGrade = NonNullable<SubmissionSummary["grade"]> & { submission_id: string };
+
+/** Pairs every student with every homework (students by name), with the submission and grade if any. */
+export function summarize(
+  homeworks: SummaryHomework[],
+  students: SummaryStudent[],
+  submissions: SummarySubmission[],
+  grades: SummaryGrade[],
+): SubmissionSummary[] {
+  const byName = [...students].sort((a, b) => a.full_name.localeCompare(b.full_name));
+  const out: SubmissionSummary[] = [];
+  for (const hw of homeworks) {
+    for (const st of byName) {
+      const sub = submissions.find((s) => s.homework_id === hw.id && s.student_id === st.id) ?? null;
+      const grade = sub ? (grades.find((g) => g.submission_id === sub.id) ?? null) : null;
+      out.push({ student: st, homework: hw, submission: sub, grade });
+    }
+  }
+  return out;
+}
+
 /** Every student x homework pair, optionally for one homework. */
 export async function loadSubmissionSummaries(homeworkId?: string): Promise<SubmissionSummary[]> {
   let hw = db().from("homeworks").select("id, title, week, due_at").order("due_at");
@@ -101,22 +126,13 @@ export async function loadSubmissionSummaries(homeworkId?: string): Promise<Subm
   if (homeworkId) subs = subs.eq("homework_id", homeworkId);
 
   const [{ data: homeworks }, { data: students }, { data: submissions }, { data: grades }] = await Promise.all([
-    hw.returns<SubmissionSummary["homework"][]>(),
-    db().from("users").select("id, full_name, version").eq("role", "student").order("full_name").returns<SubmissionSummary["student"][]>(),
-    subs.returns<(NonNullable<SubmissionSummary["submission"]> & { homework_id: string; student_id: string })[]>(),
+    hw.returns<SummaryHomework[]>(),
+    db().from("users").select("id, full_name, version").eq("role", "student").returns<SummaryStudent[]>(),
+    subs.returns<SummarySubmission[]>(),
     // select("*") so marked_by is included once the Jarvis migration has run, without breaking before it.
-    db().from("grades").select("*").returns<(NonNullable<SubmissionSummary["grade"]> & { submission_id: string })[]>(),
+    db().from("grades").select("*").returns<SummaryGrade[]>(),
   ]);
-
-  const out: SubmissionSummary[] = [];
-  for (const homework of homeworks ?? []) {
-    for (const student of students ?? []) {
-      const submission = submissions?.find((s) => s.homework_id === homework.id && s.student_id === student.id) ?? null;
-      const grade = submission ? (grades?.find((g) => g.submission_id === submission.id) ?? null) : null;
-      out.push({ student, homework, submission, grade });
-    }
-  }
-  return out;
+  return summarize(homeworks ?? [], students ?? [], submissions ?? [], grades ?? []);
 }
 
 /**
@@ -129,11 +145,13 @@ export async function visibleQuestionPoints(
   answers: Record<string, { selected_option: number | null; manual_points: number | null }>,
 ): Promise<Record<string, number | null>> {
   if (questionIds.length === 0) return {};
-  const { data } = await db()
-    .from("quiz_questions")
-    .select("id, type, correct_option, points")
-    .in("id", questionIds)
-    .returns<Pick<QuizQuestion, "id" | "type" | "correct_option" | "points">[]>();
+  const { data } = await timed("homework:question_points", () =>
+    db()
+      .from("quiz_questions")
+      .select("id, type, correct_option, points")
+      .in("id", questionIds)
+      .returns<Pick<QuizQuestion, "id" | "type" | "correct_option" | "points">[]>(),
+  );
   const out: Record<string, number | null> = {};
   for (const q of data ?? []) {
     const a = answers[q.id];

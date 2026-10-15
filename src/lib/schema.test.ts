@@ -82,3 +82,25 @@ describe("calendarDate", () => {
     expect(calendarDate("2026-2-3")).toBeNull();
   });
 });
+
+describe("performance indexes", () => {
+  it("are in schema.sql and in migration 005, so new and older databases get the same ones", () => {
+    const names = [...sql("migrations/005_performance.sql").matchAll(/create index if not exists (\w+) on (\w+ \([^)]*\))/g)];
+    expect(names.length).toBeGreaterThan(0);
+    for (const [, name, target] of names) expect(sql("schema.sql")).toContain(`create index if not exists ${name} on ${target}`);
+  });
+});
+
+describe("quiz_active_ms()", () => {
+  const block = (src: string) => {
+    const start = src.indexOf("create or replace function quiz_active_ms()");
+    const end = src.indexOf("grant execute on function quiz_active_ms() to service_role;");
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    return src.slice(start, end).replace(/^\s*--.*$/gm, "").replace(/\s+/g, " ");
+  };
+  it("is the same in schema.sql and migration 005, and only the server's key may call it", () => {
+    expect(block(sql("migrations/005_performance.sql"))).toBe(block(sql("schema.sql")));
+    expect(block(sql("schema.sql"))).toContain("revoke all on function quiz_active_ms() from public;");
+  });
+});

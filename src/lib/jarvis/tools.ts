@@ -5,7 +5,7 @@ import { db } from "../db";
 import { buildCsv, EXPORT_KINDS } from "../exports";
 import { loadMarking, loadSubmissionSummaries, questionPoints, type SubmissionSummary } from "../marking";
 import { calendarDate, DEFAULT_PENALTY, missingSetup, PARTS } from "../rules";
-import { loadStats } from "../stats";
+import { loadOverview } from "../stats";
 import { signedLinks } from "../storage";
 import { formatDateTime, isPast, toLagosInputs } from "../time";
 import type { Attendance, Homework, QuizQuestion, Settings, User } from "../types";
@@ -121,7 +121,7 @@ export const TOOLS: JarvisTool[] = [
     input_schema: obj({}),
     writes: false,
     run: async () => {
-      const [stats, summaries] = await Promise.all([loadStats(), loadSubmissionSummaries()]);
+      const { stats, summaries } = await loadOverview();
       return {
         students: stats.students.map((s) => ({
           name: s.student.full_name,

@@ -52,7 +52,7 @@ describe("student-facing code", () => {
 
 describe("server actions check who is calling", () => {
   // Every exported action is a public endpoint: the proxy's cookie check is only optimistic, so each one must
-  // call requireUser with the right role itself (login/logout excepted).
+  // call requireUser (or requireUserWith) with the right role itself (login/logout excepted).
   const actions: [file: string, role: "admin" | "student"][] = [
     ["app/actions/student.ts", "student"],
     ["app/actions/homework-admin.ts", "admin"],
@@ -68,7 +68,8 @@ describe("server actions check who is calling", () => {
       for (const body of bodies) {
         const name = body.slice(0, body.indexOf("("));
         const firstStatement = body.slice(body.indexOf("{", body.indexOf(")")));
-        expect(firstStatement.slice(0, 200), name).toContain(`requireUser("${role}")`);
+        // requireUserWith(role, load) runs the same check, with reads for that user's own id started alongside it.
+        expect(firstStatement.slice(0, 200), name).toMatch(new RegExp(`requireUser(With)?\\("${role}"`));
       }
     });
   }
