@@ -7,7 +7,7 @@ import { LinkArrow } from "@/components/navigation-progress";
 import { cardClass, linkCardClass } from "@/components/ui";
 import { StatusPill } from "@/components/status-pill";
 import { TopBar } from "@/components/top-bar";
-import { logActivity } from "@/lib/activity";
+import { logActivityInBackground } from "@/lib/activity";
 import { requireUser } from "@/lib/session";
 import { loadStudentHomework, type StudentHomework } from "@/lib/student-data";
 import { earnedBadges } from "@/lib/rules";
@@ -18,10 +18,8 @@ const WEEKS = [1, 2, 3, 4];
 export default async function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   const student = await requireUser("student");
   const { done: doneParam } = await searchParams;
-  const [items] = await Promise.all([
-    loadStudentHomework(student.id),
-    logActivity(student.id, "page_view", { page: "dashboard" }),
-  ]);
+  logActivityInBackground(student.id, "page_view", { page: "dashboard" });
+  const items = await loadStudentHomework(student.id);
 
   const toDo = items.filter((i) => i.status === "upcoming" || i.status === "in_progress");
   const overdue = items.filter((i) => i.status === "missing");

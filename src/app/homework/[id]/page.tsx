@@ -5,7 +5,7 @@ import { StatusPill } from "@/components/status-pill";
 import { LinkPending } from "@/components/navigation-progress";
 import { TopBar } from "@/components/top-bar";
 import { linkPendingClass } from "@/components/ui";
-import { logActivity } from "@/lib/activity";
+import { logActivityInBackground } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { visibleQuestionPoints } from "@/lib/marking";
 import { timed } from "@/lib/perf";
@@ -31,6 +31,8 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
   const [item] = await loadStudentHomework(student.id, id);
   if (!item) notFound();
   const { homework, status, grade, submission } = item;
+
+  logActivityInBackground(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id });
 
   const [{ data: questions }, { data: answers }, { data: uploads }, { data: settings }, { data: released }] = await Promise.all([
     timed("homework:questions", () =>
@@ -72,7 +74,6 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
           db().from("grades").select("released_at").eq("submission_id", submission.id).maybeSingle<{ released_at: string | null }>(),
         )
       : Promise.resolve({ data: null }),
-    logActivity(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id }),
   ]);
 
   const quiz = (questions ?? []).map((q) => ({ ...q, options: Array.isArray(q.options) ? q.options.map(String) : [] }));
