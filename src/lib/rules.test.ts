@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { missingSetup, autoPoints, checkUpload, clampPoints, computeGrade, earnedBadges, quizTotals, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
+import { gradeFingerprint, missingSetup, autoPoints, checkUpload, clampPoints, computeGrade, earnedBadges, quizTotals, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
 import { fromLagosInputs, toLagosInputs } from "./time";
 
 // Wednesday 7 Oct 2026, 21:00 in Lagos (UTC+1) = 20:00 UTC.
@@ -185,5 +185,19 @@ describe("missingSetup", () => {
       { version: "B", part: "quiz", mcqPoints: 0 },
       { version: "B", part: "task" },
     ]);
+  });
+});
+
+describe("gradeFingerprint", () => {
+  const g = { quiz_points: 30, task_points: 50, final_points: 80, comment: "Nice", released_at: null, marked_by: "admin" };
+  it("changes when any saved mark, the comment, the release or who marked changes", () => {
+    const base = gradeFingerprint(g);
+    expect(gradeFingerprint({ ...g })).toBe(base);
+    for (const change of [{ task_points: 51 }, { comment: "Nice!" }, { released_at: "2026-10-08T10:00:00Z" }, { marked_by: "jarvis" }, { final_points: 70 }]) {
+      expect(gradeFingerprint({ ...g, ...change })).not.toBe(base);
+    }
+  });
+  it("has a value for not marked yet", () => {
+    expect(gradeFingerprint(null)).toBe("none");
   });
 });

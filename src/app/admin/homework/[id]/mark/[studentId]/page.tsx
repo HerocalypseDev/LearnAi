@@ -5,6 +5,7 @@ import { cardClass } from "@/components/ui";
 import { loadMarking, questionPoints } from "@/lib/marking";
 import { requireUser } from "@/lib/session";
 import { signedLinks } from "@/lib/storage";
+import { gradeFingerprint } from "@/lib/rules";
 import { formatDateTime, isPast } from "@/lib/time";
 import { MarkForm } from "./mark-form";
 
@@ -119,6 +120,7 @@ export default async function MarkPage({ params }: PageProps<"/admin/homework/[i
             penalty={penalty}
             initialTask={grade?.task_points ?? null}
             initialComment={grade?.comment ?? ""}
+            expected={gradeFingerprint(grade)}
             released={!!grade?.released_at}
             deadlinePassed={deadlinePassed}
             questions={questions.map((q) => ({

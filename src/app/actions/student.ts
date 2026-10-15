@@ -3,11 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
-import { autoPoints, checkStoredUpload, checkUpload, daysLate, hasHandInContent, lateDaysAfterUpload, MAX_FILES } from "@/lib/rules";
+import { autoPoints, checkStoredUpload, checkUpload, computeGrade, daysLate, DEFAULT_PENALTY, hasHandInContent, lateDaysAfterUpload, MAX_FILES } from "@/lib/rules";
 import { requireUser } from "@/lib/session";
 import { bucket, safeFileName, uploadFolder } from "@/lib/storage";
 import { isWritingFileName, nextTextFileName, textProblem } from "@/lib/task-text";
-import type { Homework, QuizQuestion, Submission, User, Upload } from "@/lib/types";
+import type { Grade, Homework, QuizQuestion, Settings, Submission, User, Upload } from "@/lib/types";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -55,6 +55,27 @@ async function getOrCreateSubmission(student: User, homeworkId: string): Promise
   const { data: winner, error: readError } = await find();
   if (readError || !winner) throw new Error(readError?.message ?? "Could not open the homework. Try again.");
   return winner;
+}
+
+/**
+ * Marks saved (not yet released) were worked out with the old days late. Keep their penalty and final score true
+ * so the teacher's overview and Jarvis don't show a stale number; releasing recomputes everything anyway.
+ */
+async function refreshSavedPenalty(submissionId: string, days: number) {
+  const [{ data: grade }, { data: settings }] = await Promise.all([
+    db().from("grades").select("quiz_points, task_points, released_at").eq("submission_id", submissionId).maybeSingle<Pick<Grade, "quiz_points" | "task_points" | "released_at">>(),
+    db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>(),
+  ]);
+  if (!grade || grade.released_at) return;
+  const { late_penalty, final_points } = computeGrade({
+    quizPoints: grade.quiz_points,
+    taskPoints: grade.task_points,
+    daysLate: days,
+    perDay: settings?.late_penalty_per_day ?? DEFAULT_PENALTY.perDay,
+    cap: settings?.late_penalty_cap ?? DEFAULT_PENALTY.cap,
+  });
+  const { error } = await db().from("grades").update({ late_penalty, final_points }).eq("submission_id", submissionId).is("released_at", null);
+  if (error) console.error("refreshSavedPenalty failed", error.message);
 }
 
 const ALREADY_SUBMITTED = "Your quiz has already been handed in, so the answers can't be changed.";
@@ -291,6 +312,7 @@ export async function confirmUpload(input: {
     const days = lateDaysAfterUpload(submission.days_late, new Date(homework.due_at), new Date());
     if (days > submission.days_late) {
       await db().from("submissions").update({ days_late: days }).eq("id", submission.id).eq("status", "submitted").lt("days_late", days);
+      await refreshSavedPenalty(submission.id, days);
     }
   }
 

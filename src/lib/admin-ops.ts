@@ -2,7 +2,7 @@ import "server-only";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { loadMarking } from "./marking";
-import { attendanceDateProblem, checkQuestionBudget, clampPoints, computeGrade, normalizeMcq, PARTS, passwordProblem, quizScore } from "./rules";
+import { attendanceDateProblem, checkQuestionBudget, clampPoints, computeGrade, gradeFingerprint, normalizeMcq, PARTS, passwordProblem, quizScore } from "./rules";
 import { bucket } from "./storage";
 import { fromLagosInputs, toLagosInputs } from "./time";
 import type { Grade, Homework, QuizQuestion, User } from "./types";
@@ -283,6 +283,8 @@ export interface MarksInput {
   release?: ReleaseIntent;
   /** Who did the marking. Omit when only releasing/hiding, to keep the current value. */
   markedBy?: Actor;
+  /** gradeFingerprint() of the marks the caller last saw; when given and the stored marks differ, nothing is saved. */
+  expected?: string;
 }
 
 export async function saveMarks(input: MarksInput) {
@@ -292,6 +294,9 @@ export async function saveMarks(input: MarksInput) {
   if (!data.submission) throw new OpError(`${data.student.full_name} hasn't started this homework, so there's nothing to mark.`);
   if (data.submission.status !== "submitted") throw new OpError(`${data.student.full_name} hasn't handed this homework in yet.`);
   const { submission, homework, questions, answers, penalty, grade } = data;
+  if (input.expected !== undefined && input.expected !== gradeFingerprint(grade)) {
+    throw new OpError(`${data.student.full_name}'s marks were changed (by Jarvis or in another tab) since you opened this page. Reload it to see them, then save again.`, 409);
+  }
 
   // Multiple choice is re-marked from the questions as they are now, never from the stored auto_points.
   const picks: Record<string, { selected_option: number | null; manual_points: number | null }> = {};

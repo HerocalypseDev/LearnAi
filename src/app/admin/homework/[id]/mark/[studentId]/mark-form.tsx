@@ -36,6 +36,7 @@ export function MarkForm({
   initialComment,
   released,
   deadlinePassed,
+  expected,
 }: {
   homeworkId: string;
   studentId: string;
@@ -49,6 +50,8 @@ export function MarkForm({
   initialComment: string;
   released: boolean;
   deadlinePassed: boolean;
+  /** Fingerprint of the marks this page was opened with (see gradeFingerprint). */
+  expected: string;
 }) {
   const [state, action, pending] = useActionState<MarkState, FormData>(saveMarks, {});
   const [manual, setManual] = useState<Record<string, string>>(() =>
@@ -67,6 +70,7 @@ export function MarkForm({
     <form action={action} className="space-y-5">
       <input type="hidden" name="homework_id" value={homeworkId} />
       <input type="hidden" name="student_id" value={studentId} />
+      <input type="hidden" name="expected" value={expected} />
 
       <section className="space-y-3">
         {questions.length === 0 && <p className="text-sm text-slate-500">No quiz questions for this version.</p>}

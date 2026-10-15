@@ -29,6 +29,7 @@ export async function saveMarks(_prev: MarkState, formData: FormData): Promise<M
       comment: formData.get("comment") ?? "",
       release: intent === "release" ? "release" : intent === "unrelease" ? "hide" : "keep",
       markedBy: "admin",
+      expected: formData.has("expected") ? String(formData.get("expected")) : undefined,
     });
   } catch (e) {
     if (e instanceof ops.OpError) return { error: e.message };

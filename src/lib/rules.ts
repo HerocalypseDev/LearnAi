@@ -146,6 +146,17 @@ export function clampPoints(value: unknown, max: number): number {
   return Number.isFinite(n) ? Math.min(Math.max(n, 0), max) : 0;
 }
 
+/**
+ * A short fingerprint of saved marks. The marking page sends the one it was opened with; saving refuses if the
+ * stored marks have changed since (Jarvis or another tab saved meanwhile), instead of silently overwriting them.
+ */
+export function gradeFingerprint(
+  grade: { quiz_points: number; task_points: number; final_points: number; comment: string | null; released_at: string | null; marked_by?: string | null } | null,
+): string {
+  if (!grade) return "none";
+  return [grade.quiz_points, grade.task_points, grade.final_points, grade.comment ?? "", grade.released_at ?? "", grade.marked_by ?? ""].join("|");
+}
+
 // ---- Homework structure ----
 
 /** Every homework: multiple choice 30 + short explanation 10 (= quiz 40), plus an uploaded task worth 60. */
