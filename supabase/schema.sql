@@ -58,6 +58,8 @@ create table if not exists submissions (
   days_late    int not null default 0,
   unique (homework_id, student_id)
 );
+-- A student's own submissions, for the dashboard (also in migrations/005_performance.sql).
+create index if not exists submissions_student_idx on submissions (student_id);
 
 create table if not exists answers (
   id              uuid primary key default gen_random_uuid(),
@@ -109,6 +111,8 @@ create table if not exists uploads (
 -- Upload integrity (also in migrations/002_integrity.sql for older databases).
 -- One row per stored file (a double "confirm" can't list the same file twice).
 create unique index if not exists uploads_storage_path_key on uploads (storage_path);
+-- A submission's files (also in migrations/005_performance.sql).
+create index if not exists uploads_submission_idx on uploads (submission_id);
 
 -- Serialises uploads per submission: locks the submission row, then refuses a new file, or a written piece
 -- moved to a new file, once the result was released (task files stay editable after hand-in until then), and
@@ -172,6 +176,8 @@ create table if not exists activity_log (
   created_at timestamptz not null default now()
 );
 create index if not exists activity_log_user_time_idx on activity_log (user_id, created_at desc);
+-- Activity by event: the activity page's filter and the overview's quiz-time totals (also in migration 005).
+create index if not exists activity_log_event_time_idx on activity_log (event, created_at desc);
 
 -- One-row settings table.
 create table if not exists settings (

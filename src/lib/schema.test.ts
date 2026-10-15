@@ -82,3 +82,11 @@ describe("calendarDate", () => {
     expect(calendarDate("2026-2-3")).toBeNull();
   });
 });
+
+describe("performance indexes", () => {
+  it("are in schema.sql and in migration 005, so new and older databases get the same ones", () => {
+    const names = [...sql("migrations/005_performance.sql").matchAll(/create index if not exists (\w+) on (\w+ \([^)]*\))/g)];
+    expect(names.length).toBeGreaterThan(0);
+    for (const [, name, target] of names) expect(sql("schema.sql")).toContain(`create index if not exists ${name} on ${target}`);
+  });
+});
