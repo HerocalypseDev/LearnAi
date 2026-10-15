@@ -152,7 +152,7 @@ function Detail({ row, hwTitle }: { row: Row; hwTitle?: string }) {
   const parts: string[] = [];
   if (hwTitle) parts.push(hwTitle);
   if (typeof d.page === "string" && d.page !== "homework") parts.push(d.page);
-  if (row.event === "upload") parts.push(`${d.removed ? "removed" : "added"} ${String(d.file_name ?? "")}`);
+  if (row.event === "upload") parts.push(`${d.removed ? "removed" : d.edited ? "edited" : "added"} ${String(d.file_name ?? "")}`);
   if (row.event === "answer_change" && Number(d.active_ms) > 0) parts.push(`${Math.round(Number(d.active_ms) / 1000)}s on question`);
   if (row.event === "answer_change" && typeof d.length === "number") parts.push(`${d.length} characters`);
   if (row.event === "submit" && Number(d.days_late) > 0) parts.push(`${d.days_late} day(s) late`);

@@ -37,11 +37,14 @@ export type HomeworkStatus = "upcoming" | "in_progress" | "missing" | "submitted
 
 export function homeworkStatus(
   dueAt: Date,
-  submission: { status: "draft" | "submitted"; submitted_at: string | null } | null,
+  submission: { status: "draft" | "submitted"; submitted_at: string | null; days_late?: number } | null,
   now: Date,
 ): HomeworkStatus {
   if (submission?.status === "submitted" && submission.submitted_at) {
-    return daysLate(dueAt, new Date(submission.submitted_at)) > 0 ? "late" : "submitted";
+    // days_late can rise after hand-in (a task file added after the deadline), so it counts too: the pill then
+    // agrees with the late penalty, the teacher's overview and the CSV export.
+    const late = Math.max(daysLate(dueAt, new Date(submission.submitted_at)), submission.days_late ?? 0);
+    return late > 0 ? "late" : "submitted";
   }
   if (now.getTime() > dueAt.getTime()) return "missing";
   return submission ? "in_progress" : "upcoming";

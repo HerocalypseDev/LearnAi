@@ -70,6 +70,11 @@ describe("homeworkStatus", () => {
     expect(homeworkStatus(due, { status: "submitted", submitted_at: "2026-10-07T20:00:00+01:00" }, after)).toBe("submitted");
     expect(homeworkStatus(due, { status: "submitted", submitted_at: "2026-10-07T21:01:00+01:00" }, after)).toBe("late");
   });
+
+  it("is late when a task file added after the deadline raised days_late, even if the quiz was on time", () => {
+    expect(homeworkStatus(due, { status: "submitted", submitted_at: "2026-10-07T20:00:00+01:00", days_late: 1 }, after)).toBe("late");
+    expect(homeworkStatus(due, { status: "submitted", submitted_at: "2026-10-07T20:00:00+01:00", days_late: 0 }, after)).toBe("submitted");
+  });
 });
 
 describe("checkUpload", () => {

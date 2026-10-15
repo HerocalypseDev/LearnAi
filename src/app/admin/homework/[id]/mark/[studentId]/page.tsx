@@ -149,7 +149,7 @@ export default async function MarkPage({ params }: PageProps<"/admin/homework/[i
                   <span className="w-36 shrink-0 text-slate-500">{formatDateTime(e.created_at)}</span>
                   <span>
                     {EVENT_LABELS[e.event] ?? e.event}
-                    {e.event === "upload" && `: ${e.detail.removed ? "removed" : "added"} ${String(e.detail.file_name ?? "")}`}
+                    {e.event === "upload" && `: ${e.detail.removed ? "removed" : e.detail.edited ? "edited" : "added"} ${String(e.detail.file_name ?? "")}`}
                     {e.event === "submit" && Number(e.detail.days_late) > 0 && ` (${e.detail.days_late} day${Number(e.detail.days_late) === 1 ? "" : "s"} late)`}
                     {e.device && <span className="text-slate-400"> · {e.device}</span>}
                   </span>
