@@ -242,6 +242,8 @@ export const TOOLS: JarvisTool[] = [
           instructions: s.version === "B" ? homework.instructions_b : homework.instructions_a,
           marking_notes: homework.marking_notes ?? "",
           student_files: uploads.map((u) => ({
+            // Chosen by the child, so untrusted: student_file_name says so; file_name stays for older Jarvis builds.
+            student_file_name: u.file_name,
             file_name: u.file_name,
             type: u.file_type,
             size_bytes: u.size_bytes,

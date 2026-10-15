@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { confirmUpload, uploadTaskText } from "@/app/actions/student";
 import { Spinner } from "@/components/spinner";
 import { loadLocalStorage, removeLocalStorage, saveLocalStorage } from "@/lib/local-storage-client";
-import { cursorAfterInsert, insertListLine, isListLine, lineAt, MAX_TEXT_LENGTH, nextListPrefix, textProblem } from "@/lib/task-text";
+import { cursorAfterInsert, insertListLine, isListLine, lineAt, MAX_TEXT_LENGTH, nextListPrefix, readDraft, textProblem, writeDraft } from "@/lib/task-text";
 
 export interface TaskEditorProps {
   homeworkId: string;
@@ -41,8 +41,9 @@ function sendText(url: string, blob: Blob, onProgress: (percent: number) => void
 export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId, initialText }: TaskEditorProps) {
   const key = draftKey(studentId, homeworkId, uploadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // An unsent draft wins over the stored text: it is newer. This component only mounts in the browser (on a click).
-  const [text, setTextState] = useState(() => loadLocalStorage(key) || initialText || "");
+  // An unsent draft wins over the stored text, as long as it was started from that same text (an edit saved later
+  // from another device makes an old draft stale). This component only mounts in the browser (on a click).
+  const [text, setTextState] = useState(() => readDraft(loadLocalStorage(key), initialText ?? "") ?? initialText ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState("");
@@ -52,7 +53,7 @@ export function TaskEditor({ homeworkId, studentId, onClose, onSuccess, uploadId
     setTextState(value);
     // The draft is only kept while it differs from what's already uploaded.
     if (value === (initialText ?? "")) removeLocalStorage(key);
-    else saveLocalStorage(key, value);
+    else saveLocalStorage(key, writeDraft(value, initialText ?? ""));
   }
 
   function close() {

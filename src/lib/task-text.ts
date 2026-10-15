@@ -30,6 +30,35 @@ export function textProblem(text: string): string | null {
   return null;
 }
 
+// --- Drafts ---
+
+/** A draft as stored in localStorage: the text plus a short fingerprint of the text it was started from. */
+export function writeDraft(text: string, base: string): string {
+  return JSON.stringify({ v: 1, base: fingerprint(base), text });
+}
+
+/** The draft's text, or null when there is none or it was started from different text than `base` (stale). */
+export function readDraft(stored: string | null, base: string): string | null {
+  if (!stored) return null;
+  try {
+    const d = JSON.parse(stored) as { v?: number; base?: string; text?: unknown };
+    if (d?.v === 1 && typeof d.text === "string") return d.base === fingerprint(base) && d.text ? d.text : null;
+  } catch {
+    // An older plain-text draft (before fingerprints): only trust it for a new piece.
+  }
+  return base === "" ? stored : null;
+}
+
+/** Cheap, stable string hash (FNV-1a) plus the length: enough to tell two texts apart, not a security measure. */
+function fingerprint(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return `${text.length}:${(h >>> 0).toString(36)}`;
+}
+
 // --- Lists ---
 
 const LIST_LINE = /^(\s*)(?:([-*])|(\d+)\.)\s/;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { appendListLine, cursorAfterInsert, insertListLine, isListLine, isWritingFileName, lineAt, nextListPrefix, nextTextFileName, textProblem } from "./task-text";
+import { appendListLine, cursorAfterInsert, insertListLine, isListLine, isWritingFileName, lineAt, readDraft, writeDraft, nextListPrefix, nextTextFileName, textProblem } from "./task-text";
 
 describe("nextTextFileName", () => {
   it("returns Writing-1.txt for empty list", () => {
@@ -162,5 +162,20 @@ describe("lineAt / isListLine (which Enter presses the editor takes over)", () =
     expect(isListLine("  12. a")).toBe(true);
     expect(isListLine("-")).toBe(false);
     expect(isListLine("hello - world")).toBe(false);
+  });
+});
+
+describe("drafts", () => {
+  it("restores a draft started from the same text", () => {
+    expect(readDraft(writeDraft("new words", "old words"), "old words")).toBe("new words");
+    expect(readDraft(writeDraft("first try", ""), "")).toBe("first try");
+  });
+  it("ignores a draft when the stored text changed since (saved later from another device)", () => {
+    expect(readDraft(writeDraft("new words", "old words"), "edited elsewhere")).toBeNull();
+  });
+  it("handles nothing stored, and old plain-text drafts only for a new piece", () => {
+    expect(readDraft(null, "")).toBeNull();
+    expect(readDraft("plain old draft", "")).toBe("plain old draft");
+    expect(readDraft("plain old draft", "saved text")).toBeNull();
   });
 });
