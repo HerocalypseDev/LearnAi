@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { timed } from "./perf";
 
 export const UPLOAD_BUCKET = "uploads";
 
@@ -21,7 +22,7 @@ export function safeFileName(name: string): string {
 /** Signed links (valid 1 hour) for previewing / downloading private files. */
 export async function signedLinks(paths: string[]): Promise<Record<string, string>> {
   if (paths.length === 0) return {};
-  const { data, error } = await bucket().createSignedUrls(paths, 60 * 60);
+  const { data, error } = await timed("storage:signed_urls", () => bucket().createSignedUrls(paths, 60 * 60));
   if (error) {
     console.error("createSignedUrls failed", error.message);
     return {};

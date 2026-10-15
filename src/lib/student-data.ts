@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { timed } from "./perf";
 import { homeworkStatus, isGradeVisible, type HomeworkStatus } from "./rules";
 import type { Grade, Homework, Submission } from "./types";
 
@@ -19,15 +20,15 @@ export async function loadStudentHomework(studentId: string, homeworkId?: string
   if (homeworkId) hwQuery = hwQuery.eq("id", homeworkId);
 
   const [{ data: homeworks, error: hwError }, { data: submissions, error: subError }] = await Promise.all([
-    hwQuery.returns<Homework[]>(),
-    db().from("submissions").select("*").eq("student_id", studentId).returns<Submission[]>(),
+    timed("student:homeworks", () => hwQuery.returns<Homework[]>()),
+    timed("student:submissions", () => db().from("submissions").select("*").eq("student_id", studentId).returns<Submission[]>()),
   ]);
   if (hwError) throw new Error(hwError.message);
   if (subError) throw new Error(subError.message);
 
   const subIds = (submissions ?? []).map((s) => s.id);
   const { data: grades, error: gradeError } = subIds.length
-    ? await db().from("grades").select("*").in("submission_id", subIds).returns<Grade[]>()
+    ? await timed("student:grades", () => db().from("grades").select("*").in("submission_id", subIds).returns<Grade[]>())
     : { data: [] as Grade[], error: null };
   if (gradeError) throw new Error(gradeError.message);
 

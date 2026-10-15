@@ -3,6 +3,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "./db";
+import { timed } from "./perf";
 import {
   passwordVersion,
   SESSION_COOKIE,
@@ -36,7 +37,7 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   if (!token) return null;
   const payload = await verifySessionToken(token);
   if (!payload) return null;
-  const { data } = await db().from("users").select("*").eq("id", payload.uid).maybeSingle<User>();
+  const { data } = await timed("auth:user", () => db().from("users").select("*").eq("id", payload.uid).maybeSingle<User>());
   if (!data || !sessionMatchesPassword(payload, data.password_hash)) return null;
   return data;
 });

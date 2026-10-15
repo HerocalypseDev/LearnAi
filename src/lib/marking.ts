@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "./db";
+import { timed } from "./perf";
 import { autoPoints, DEFAULT_PENALTY } from "./rules";
 import type { Answer, Grade, Homework, QuizQuestion, Settings, Submission, Upload, User } from "./types";
 
@@ -129,11 +130,13 @@ export async function visibleQuestionPoints(
   answers: Record<string, { selected_option: number | null; manual_points: number | null }>,
 ): Promise<Record<string, number | null>> {
   if (questionIds.length === 0) return {};
-  const { data } = await db()
-    .from("quiz_questions")
-    .select("id, type, correct_option, points")
-    .in("id", questionIds)
-    .returns<Pick<QuizQuestion, "id" | "type" | "correct_option" | "points">[]>();
+  const { data } = await timed("homework:question_points", () =>
+    db()
+      .from("quiz_questions")
+      .select("id, type, correct_option, points")
+      .in("id", questionIds)
+      .returns<Pick<QuizQuestion, "id" | "type" | "correct_option" | "points">[]>(),
+  );
   const out: Record<string, number | null> = {};
   for (const q of data ?? []) {
     const a = answers[q.id];

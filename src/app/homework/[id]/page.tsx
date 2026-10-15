@@ -8,6 +8,7 @@ import { linkPendingClass } from "@/components/ui";
 import { logActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { visibleQuestionPoints } from "@/lib/marking";
+import { timed } from "@/lib/perf";
 import { DEFAULT_PENALTY, PARTS } from "@/lib/rules";
 import { requireUser } from "@/lib/session";
 import { signedLinks } from "@/lib/storage";
@@ -32,36 +33,44 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
   const { homework, status, grade, submission } = item;
 
   const [{ data: questions }, { data: answers }, { data: uploads }, { data: settings }, { data: released }] = await Promise.all([
-    db()
-      .from("quiz_questions")
-      // Explicit columns: this goes to the browser.
-      .select("id, version, type, prompt, options, points, position")
-      .eq("homework_id", id)
-      .in("version", ["both", student.version ?? "A"])
-      .order("position")
-      .order("id")
-      .returns<StudentQuestion[]>(),
+    timed("homework:questions", () =>
+      db()
+        .from("quiz_questions")
+        // Explicit columns: this goes to the browser.
+        .select("id, version, type, prompt, options, points, position")
+        .eq("homework_id", id)
+        .in("version", ["both", student.version ?? "A"])
+        .order("position")
+        .order("id")
+        .returns<StudentQuestion[]>(),
+    ),
     submission
-      ? db()
-          .from("answers")
-          .select("question_id, answer_text, selected_option, manual_points")
-          .eq("submission_id", submission.id)
-          .returns<Pick<Answer, "question_id" | "answer_text" | "selected_option" | "manual_points">[]>()
+      ? timed("homework:answers", () =>
+          db()
+            .from("answers")
+            .select("question_id, answer_text, selected_option, manual_points")
+            .eq("submission_id", submission.id)
+            .returns<Pick<Answer, "question_id" | "answer_text" | "selected_option" | "manual_points">[]>(),
+        )
       : Promise.resolve({ data: [] as Pick<Answer, "question_id" | "answer_text" | "selected_option" | "manual_points">[] }),
     submission
-      ? db()
-          .from("uploads")
-          .select("id, file_name, file_type, size_bytes, storage_path, uploaded_at")
-          .eq("submission_id", submission.id)
-          .order("uploaded_at")
-          .order("id")
-          .returns<Omit<Upload, "submission_id">[]>()
+      ? timed("homework:uploads", () =>
+          db()
+            .from("uploads")
+            .select("id, file_name, file_type, size_bytes, storage_path, uploaded_at")
+            .eq("submission_id", submission.id)
+            .order("uploaded_at")
+            .order("id")
+            .returns<Omit<Upload, "submission_id">[]>(),
+        )
       : Promise.resolve({ data: [] as Omit<Upload, "submission_id">[] }),
-    db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>(),
+    timed("homework:settings", () => db().from("settings").select("late_penalty_per_day, late_penalty_cap").eq("id", 1).maybeSingle<Settings>()),
     // Only whether the result was released (task files lock then), never the marks themselves: the grade above is
     // null until the child may see it, but the lock must follow the release even before the deadline.
     submission
-      ? db().from("grades").select("released_at").eq("submission_id", submission.id).maybeSingle<{ released_at: string | null }>()
+      ? timed("homework:released", () =>
+          db().from("grades").select("released_at").eq("submission_id", submission.id).maybeSingle<{ released_at: string | null }>(),
+        )
       : Promise.resolve({ data: null }),
     logActivity(student.id, grade ? "view_feedback" : "page_view", { page: "homework", homework_id: id }),
   ]);

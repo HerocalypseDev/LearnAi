@@ -2,6 +2,7 @@ import { GroupedColumns } from "@/components/grouped-columns";
 import { SubmissionRow } from "@/components/submission-row";
 import { ADMIN_LINKS, TopBar } from "@/components/top-bar";
 import { loadSubmissionSummaries } from "@/lib/marking";
+import { timed } from "@/lib/perf";
 import { requireUser } from "@/lib/session";
 import { loadStats, type StudentStats } from "@/lib/stats";
 import { formatDateTime } from "@/lib/time";
@@ -11,7 +12,10 @@ const SERIES_COLORS = ["#2a78d6", "#eb6834"];
 
 export default async function AdminPage() {
   await requireUser("admin");
-  const [summaries, stats] = await Promise.all([loadSubmissionSummaries(), loadStats()]);
+  const [summaries, stats] = await Promise.all([
+    timed("admin:summaries", () => loadSubmissionSummaries()),
+    timed("admin:stats", () => loadStats()),
+  ]);
   const toMark = summaries.filter((s) => s.submission?.status === "submitted" && !s.grade?.released_at);
   const categories = stats.homeworks.map((h, i) => `HW${i + 1}`);
   const color = (i: number) => SERIES_COLORS[i] ?? "#6b7280";

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { logActivity } from "@/lib/activity";
 import { db } from "@/lib/db";
+import { timed } from "@/lib/perf";
 import { autoPoints, checkStoredUpload, checkUpload, computeGrade, daysLate, DEFAULT_PENALTY, hasHandInContent, lateDaysAfterUpload, MAX_FILES } from "@/lib/rules";
 import { requireUser } from "@/lib/session";
 import { bucket, safeFileName, uploadFolder } from "@/lib/storage";
@@ -22,7 +23,7 @@ const MAX_ANSWER_LENGTH = 5000;
 
 async function loadHomework(homeworkId: string): Promise<Homework | null> {
   if (!UUID.test(homeworkId)) return null;
-  const { data } = await db().from("homeworks").select("*").eq("id", homeworkId).maybeSingle<Homework>();
+  const { data } = await timed("action:homework", () => db().from("homeworks").select("*").eq("id", homeworkId).maybeSingle<Homework>());
   return data;
 }
 
@@ -36,7 +37,9 @@ async function loadHomework(homeworkId: string): Promise<Homework | null> {
  */
 async function getOrCreateSubmission(student: User, homeworkId: string): Promise<Submission> {
   const find = () =>
-    db().from("submissions").select("*").eq("homework_id", homeworkId).eq("student_id", student.id).maybeSingle<Submission>();
+    timed("action:submission", () =>
+      db().from("submissions").select("*").eq("homework_id", homeworkId).eq("student_id", student.id).maybeSingle<Submission>(),
+    );
 
   const { data: existing, error: findError } = await find();
   if (findError) throw new Error(findError.message);
@@ -101,12 +104,9 @@ export async function saveAnswer(input: {
   const homework = await loadHomework(input.homeworkId);
   if (!homework || !UUID.test(input.questionId)) return { ok: false, error: "Homework not found." };
 
-  const { data: question } = await db()
-    .from("quiz_questions")
-    .select("*")
-    .eq("id", input.questionId)
-    .eq("homework_id", homework.id)
-    .maybeSingle<QuizQuestion>();
+  const { data: question } = await timed("autosave:question", () =>
+    db().from("quiz_questions").select("*").eq("id", input.questionId).eq("homework_id", homework.id).maybeSingle<QuizQuestion>(),
+  );
   if (!question || (question.version !== "both" && question.version !== student.version)) {
     return { ok: false, error: "Question not found." };
   }
@@ -126,19 +126,21 @@ export async function saveAnswer(input: {
     answerText = String(input.answerText ?? "").slice(0, MAX_ANSWER_LENGTH);
   }
 
-  const { error } = await db()
-    .from("answers")
-    .upsert(
-      {
-        submission_id: submission.id,
-        question_id: question.id,
-        answer_text: answerText,
-        selected_option: selected,
-        auto_points: autoPoints(question, selected),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "submission_id,question_id" },
-    );
+  const { error } = await timed("autosave:upsert_answer", () =>
+    db()
+      .from("answers")
+      .upsert(
+        {
+          submission_id: submission.id,
+          question_id: question.id,
+          answer_text: answerText,
+          selected_option: selected,
+          auto_points: autoPoints(question, selected),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "submission_id,question_id" },
+      ),
+  );
   if (error) {
     // The database refuses answer changes once handed in (another tab may have handed in a moment ago).
     if (/already_submitted/.test(error.message)) return { ok: false, error: ALREADY_SUBMITTED };
@@ -241,7 +243,7 @@ export async function confirmUpload(input: {
   let object: { name: string; metadata?: { size?: unknown } | null } | undefined;
   let size: number | null = null;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const { data: listed } = await bucket().list(folder, { search: objectName, limit: 10 });
+    const { data: listed } = await timed("upload:storage_list", () => bucket().list(folder, { search: objectName, limit: 10 }));
     object = listed?.find((o) => o.name === objectName);
     const reported = object?.metadata?.size;
     size = reported === undefined || reported === null ? null : Number(reported);
@@ -281,13 +283,15 @@ export async function confirmUpload(input: {
     if (isWritingFileName(savedName) && existing.some((u) => u.file_name === savedName)) savedName = nextTextFileName(existing);
     // The database is the hard gate: a trigger (supabase/schema.sql, enforce_upload_rules) locks the submission,
     // and refuses the row if the result was released or it already has MAX_FILES files, even for parallel requests.
-    ({ error } = await db().from("uploads").insert({
-      submission_id: submission.id,
-      file_name: savedName,
-      file_type: fileType,
-      size_bytes: storedSize,
-      storage_path: path,
-    }));
+    ({ error } = await timed("upload:insert", () =>
+      db().from("uploads").insert({
+        submission_id: submission.id,
+        file_name: savedName,
+        file_type: fileType,
+        size_bytes: storedSize,
+        storage_path: path,
+      }),
+    ));
   }
   if (error) {
     if (error.code === "23505") return { ok: true }; // this exact file was already recorded (double confirm)
