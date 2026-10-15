@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoPoints, checkUpload, clampPoints, computeGrade, earnedBadges, quizTotals, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
+import { missingSetup, autoPoints, checkUpload, clampPoints, computeGrade, earnedBadges, quizTotals, daysLate, finalPoints, homeworkStatus, isGradeVisible, latePenalty } from "./rules";
 import { fromLagosInputs, toLagosInputs } from "./time";
 
 // Wednesday 7 Oct 2026, 21:00 in Lagos (UTC+1) = 20:00 UTC.
@@ -167,5 +167,23 @@ describe("earnedBadges", () => {
 
   it("drops Never late after a late hand-in", () => {
     expect(names(earnedBadges([item({}), item({ daysLate: 1 })], now))).not.toContain("Never late");
+  });
+});
+
+describe("missingSetup", () => {
+  const ready = { instructions_a: "Draw a robot", instructions_b: "Build a chatbot" };
+  it("is empty when both versions have 30 quiz points, a short answer and instructions", () => {
+    expect(missingSetup(ready, [{ version: "both", type: "mcq", points: 30 }, { version: "both", type: "short", points: 10 }])).toEqual([]);
+  });
+  it("lists what each version still needs", () => {
+    expect(
+      missingSetup({ instructions_a: "x", instructions_b: " " }, [
+        { version: "A", type: "mcq", points: 30 },
+        { version: "both", type: "short", points: 10 },
+      ]),
+    ).toEqual([
+      { version: "B", part: "quiz", mcqPoints: 0 },
+      { version: "B", part: "task" },
+    ]);
   });
 });

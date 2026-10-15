@@ -4,7 +4,7 @@ import { CLASS_SUNDAYS } from "../course";
 import { db } from "../db";
 import { buildCsv, EXPORT_KINDS } from "../exports";
 import { loadMarking, loadSubmissionSummaries, questionPoints, type SubmissionSummary } from "../marking";
-import { calendarDate, DEFAULT_PENALTY, PARTS, quizTotals } from "../rules";
+import { calendarDate, DEFAULT_PENALTY, missingSetup, PARTS } from "../rules";
 import { loadStats } from "../stats";
 import { signedLinks } from "../storage";
 import { formatDateTime, isPast, toLagosInputs } from "../time";
@@ -72,14 +72,13 @@ async function readiness(homework: Homework) {
     .select("version, type, points")
     .eq("homework_id", homework.id)
     .returns<Pick<QuizQuestion, "version" | "type" | "points">[]>();
-  const missing: string[] = [];
-  for (const v of ["A", "B"] as const) {
-    const t = quizTotals((data ?? []).filter((q) => q.version === v || q.version === "both"));
-    if (t.mcq !== PARTS.mcq) missing.push(`quiz ${v} has ${t.mcq}/${PARTS.mcq} points`);
-    if (t.short !== PARTS.short) missing.push(`short answer ${v} missing`);
-    if (!(v === "A" ? homework.instructions_a : homework.instructions_b).trim()) missing.push(`task instructions ${v} missing`);
-  }
-  return missing;
+  return missingSetup(homework, data ?? []).map((m) =>
+    m.part === "quiz"
+      ? `quiz ${m.version} has ${m.mcqPoints}/${PARTS.mcq} points`
+      : m.part === "short"
+        ? `short answer ${m.version} missing`
+        : `task instructions ${m.version} missing`,
+  );
 }
 
 function homeworkView(h: Homework) {

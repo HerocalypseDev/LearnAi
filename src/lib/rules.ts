@@ -158,6 +158,24 @@ export function quizTotals(questions: { type: "mcq" | "short"; points: number }[
   };
 }
 
+/**
+ * What still needs doing before a homework is ready for both versions: each version's multiple choice adding up to
+ * PARTS.mcq, its short answer, and its task instructions. Empty when ready. Used by the admin list and Jarvis.
+ */
+export function missingSetup(
+  homework: { instructions_a: string; instructions_b: string },
+  questions: { version: "A" | "B" | "both"; type: "mcq" | "short"; points: number }[],
+): { version: "A" | "B"; part: "quiz" | "short" | "task"; mcqPoints?: number }[] {
+  const out: { version: "A" | "B"; part: "quiz" | "short" | "task"; mcqPoints?: number }[] = [];
+  for (const v of ["A", "B"] as const) {
+    const t = quizTotals(questions.filter((q) => q.version === v || q.version === "both"));
+    if (t.mcq !== PARTS.mcq) out.push({ version: v, part: "quiz", mcqPoints: t.mcq });
+    if (t.short !== PARTS.short) out.push({ version: v, part: "short" });
+    if (!(v === "A" ? homework.instructions_a : homework.instructions_b).trim()) out.push({ version: v, part: "task" });
+  }
+  return out;
+}
+
 // ---- Badges ----
 
 export interface BadgeInput {

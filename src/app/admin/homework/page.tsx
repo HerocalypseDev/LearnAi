@@ -5,7 +5,7 @@ import { buttonClass, cardClass, linkCardClass } from "@/components/ui";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { formatDateTime } from "@/lib/time";
-import { PARTS, quizTotals } from "@/lib/rules";
+import { missingSetup, PARTS } from "@/lib/rules";
 import type { Homework, QuizQuestion } from "@/lib/types";
 
 export default async function HomeworkListPage({ searchParams }: PageProps<"/admin/homework">) {
@@ -21,16 +21,10 @@ export default async function HomeworkListPage({ searchParams }: PageProps<"/adm
   if (error) throw new Error(error.message);
 
   /** What still needs doing before a homework is ready for the kids. */
-  const missing = (h: Homework) => {
-    const out: string[] = [];
-    for (const v of ["A", "B"] as const) {
-      const t = quizTotals((questions ?? []).filter((q) => q.homework_id === h.id && (q.version === v || q.version === "both")));
-      if (t.mcq !== PARTS.mcq) out.push(`quiz ${v} (${t.mcq}/${PARTS.mcq})`);
-      if (t.short !== PARTS.short) out.push(`short answer ${v}`);
-      if (!(v === "A" ? h.instructions_a : h.instructions_b).trim()) out.push(`task instructions ${v}`);
-    }
-    return out;
-  };
+  const missing = (h: Homework) =>
+    missingSetup(h, (questions ?? []).filter((q) => q.homework_id === h.id)).map((m) =>
+      m.part === "quiz" ? `quiz ${m.version} (${m.mcqPoints}/${PARTS.mcq})` : m.part === "short" ? `short answer ${m.version}` : `task instructions ${m.version}`,
+    );
 
   return (
     <>
