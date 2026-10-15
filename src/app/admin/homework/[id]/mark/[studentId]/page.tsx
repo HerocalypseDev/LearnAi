@@ -5,7 +5,7 @@ import { cardClass, linkPendingClass } from "@/components/ui";
 import { LinkPending } from "@/components/navigation-progress";
 import { loadMarking, questionPoints } from "@/lib/marking";
 import { requireUser } from "@/lib/session";
-import { signedLinks } from "@/lib/storage";
+import { signedPreviewLinks } from "@/lib/storage";
 import { gradeFingerprint } from "@/lib/rules";
 import { formatDateTime, isPast } from "@/lib/time";
 import { MarkForm } from "./mark-form";
@@ -29,7 +29,7 @@ export default async function MarkPage({ params }: PageProps<"/admin/homework/[i
   const data = await loadMarking(id, studentId);
   if (!data) notFound();
   const { homework, student, submission, questions, answers, uploads, grade, penalty, secondsPerQuestion, timeline } = data;
-  const links = await signedLinks(uploads.map((u) => u.storage_path));
+  const links = await signedPreviewLinks(uploads);
   const deadlinePassed = isPast(homework.due_at);
   const submitted = submission?.status === "submitted";
 
@@ -85,14 +85,15 @@ export default async function MarkPage({ params }: PageProps<"/admin/homework/[i
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
               {uploads.map((u) => {
-                const link = links[u.storage_path];
+                const link = links[u.storage_path]?.link;
+                const preview = links[u.storage_path]?.thumb ?? link;
                 const image = /^image\//.test(u.file_type ?? "");
                 return (
                   <li key={u.id} className="rounded-xl border border-slate-200 p-2">
                     {image && link && (
                       <a href={link} target="_blank" rel="noreferrer">
                         {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed link */}
-                        <img src={link} alt={u.file_name} className="mb-2 max-h-48 w-full rounded-lg object-contain" />
+                        <img src={preview} alt={u.file_name} loading="lazy" decoding="async" className="mb-2 max-h-48 w-full rounded-lg object-contain" />
                       </a>
                     )}
                     <div className="truncate text-sm font-medium">{u.file_name}</div>

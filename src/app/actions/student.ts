@@ -5,22 +5,22 @@ import { after } from "next/server";
 import { logActivityInBackground } from "@/lib/activity";
 import { db } from "@/lib/db";
 import { timed } from "@/lib/perf";
-import { autoPoints, checkStoredUpload, checkUpload, computeGrade, daysLate, DEFAULT_PENALTY, hasHandInContent, lateDaysAfterUpload, MAX_FILES } from "@/lib/rules";
+import { autoPoints, canThumbnail, checkStoredUpload, checkUpload, THUMBNAIL_MIN_BYTES, computeGrade, daysLate, DEFAULT_PENALTY, hasHandInContent, lateDaysAfterUpload, MAX_FILES } from "@/lib/rules";
 import { requireUserWith } from "@/lib/session";
-import { bucket, safeFileName, signedLinks, uploadFolder } from "@/lib/storage";
+import { bucket, removeFiles, safeFileName, signedPreviewLinks, thumbnailPath, uploadFolder } from "@/lib/storage";
 import { isWritingFileName, nextTextFileName, textProblem } from "@/lib/task-text";
-import type { Grade, Homework, QuizQuestion, Settings, Submission, User, Upload } from "@/lib/types";
+import type { Grade, Homework, PreviewLinks, QuizQuestion, Settings, Submission, User, Upload } from "@/lib/types";
 
 /** `locked`: the result was released, so the page should re-read itself to show the task as closed. */
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string; locked?: boolean };
 
-/** A task file as the student's page shows it: never the storage path. `link` is a signed link valid for 1 hour. */
+/** A task file as the student's page shows it: never the storage path. `links` are signed links valid for 1 hour. */
 export interface UploadedFile {
   id: string;
   file_name: string;
   file_type: string | null;
   size_bytes: number;
-  link: string | null;
+  links: PreviewLinks | null;
 }
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -129,13 +129,19 @@ async function loadTaskState(studentId: string, homeworkId: string) {
   return { homework, submission, released: !!grade?.released_at, files: data?.uploads ?? [] };
 }
 
-const toUploadedFile = (u: TaskUpload, link: string | null): UploadedFile => ({
+const toUploadedFile = (u: TaskUpload, links: PreviewLinks | null): UploadedFile => ({
   id: u.id,
   file_name: u.file_name,
   file_type: u.file_type,
   size_bytes: u.size_bytes,
-  link,
+  links,
 });
+
+/** Signed links for one just-saved file (and its picture preview); never throws. */
+const previewLinks = (path: string, fileName: string): Promise<PreviewLinks | null> =>
+  signedPreviewLinks([{ storage_path: path, file_name: fileName }])
+    .then((links) => links[path] ?? null)
+    .catch(() => null);
 
 type AnswerQuestion = Pick<QuizQuestion, "id" | "version" | "type" | "options" | "correct_option" | "points">;
 
@@ -232,7 +238,7 @@ export async function requestUpload(input: {
   homeworkId: string;
   fileName: string;
   sizeBytes: number;
-}): Promise<Result<{ signedUrl: string; path: string }>> {
+}): Promise<Result<{ signedUrl: string; path: string; thumbUrl: string | null }>> {
   const [student, state] = await requireUserWith("student", (studentId) => loadTaskState(studentId, String(input.homeworkId ?? "")));
   const { homework, released, files } = state;
   if (!homework) return { ok: false, error: "Homework not found." };
@@ -244,12 +250,17 @@ export async function requestUpload(input: {
   if (problem) return { ok: false, error: problem };
 
   const path = `${uploadFolder(student.id, homework.id)}/${crypto.randomUUID()}-${safeFileName(input.fileName)}`;
-  const { data, error } = await timed("upload:sign_upload", () => bucket().createSignedUploadUrl(path));
+  // A big picture also gets a link for its small preview, which the browser makes and sends after the file.
+  const wantsThumb = canThumbnail(input.fileName) && Number(input.sizeBytes) >= THUMBNAIL_MIN_BYTES;
+  const [{ data, error }, thumb] = await Promise.all([
+    timed("upload:sign_upload", () => bucket().createSignedUploadUrl(path)),
+    wantsThumb ? timed("upload:sign_thumb", () => bucket().createSignedUploadUrl(thumbnailPath(path))) : null,
+  ]);
   if (error || !data) {
     console.error("createSignedUploadUrl failed", error?.message);
     return { ok: false, error: "Couldn't start the upload. Try again." };
   }
-  return { ok: true, signedUrl: data.signedUrl, path };
+  return { ok: true, signedUrl: data.signedUrl, path, thumbUrl: thumb?.data?.signedUrl ?? null };
 }
 
 /**
@@ -308,10 +319,10 @@ export async function confirmUpload(input: {
   // Confirming the same file twice (double tap, retry) is fine and must never delete the stored file,
   // so this comes before anything below that may remove the object.
   const recorded = files.find((u) => u.storage_path === path);
-  if (recorded) return { ok: true, upload: toUploadedFile(recorded, (await signedLinks([path]))[path] ?? null) };
+  if (recorded) return { ok: true, upload: toUploadedFile(recorded, await previewLinks(path, recorded.file_name)) };
 
   if (state.released) {
-    await bucket().remove([path]);
+    await removeFiles([path]);
     return { ok: false, error: TASK_LOCKED, locked: true };
   }
 
@@ -320,7 +331,7 @@ export async function confirmUpload(input: {
   if (input.replaceUploadId !== undefined) {
     replacing = files.find((u) => u.id === String(input.replaceUploadId)) ?? null;
     if (!replacing || !isWritingFileName(replacing.file_name)) {
-      await bucket().remove([path]);
+      await removeFiles([path]);
       return { ok: false, error: "That piece of writing wasn't found. Close the editor and try again." };
     }
   }
@@ -330,13 +341,13 @@ export async function confirmUpload(input: {
   // A replacement doesn't add a file, so it doesn't count against the limit.
   const verdict = checkStoredUpload(fileName, objectName, size, replacing ? 0 : files.length);
   if (verdict) {
-    if (!verdict.retryable) await bucket().remove([path]);
+    if (!verdict.retryable) await removeFiles([path]);
     return { ok: false, error: verdict.problem };
   }
   const storedSize = size as number;
 
   // The link the browser shows for the new file is signed alongside the write (it is only handed out if the write worked).
-  const linkPromise = signedLinks([path]);
+  const linkPromise = previewLinks(path, fileName);
   let error: { code?: string; message: string } | null;
   let saved: TaskUpload;
   if (replacing) {
@@ -352,7 +363,7 @@ export async function confirmUpload(input: {
     );
     error = res.error;
     if (!error && !res.data?.length) {
-      await bucket().remove([path]);
+      await removeFiles([path]);
       return { ok: false, error: "This writing was changed somewhere else. Close the editor and open it again." };
     }
     saved = { ...replacing, storage_path: path, size_bytes: storedSize, file_type: fileType };
@@ -382,10 +393,10 @@ export async function confirmUpload(input: {
     if (error.code === "23505") {
       // This exact file was already recorded (double confirm): answer with that row.
       const { data: row } = await db().from("uploads").select("id, file_name, file_type, size_bytes, storage_path").eq("storage_path", path).maybeSingle<TaskUpload>();
-      if (row) return { ok: true, upload: toUploadedFile(row, (await linkPromise)[path] ?? null) };
+      if (row) return { ok: true, upload: toUploadedFile(row, await linkPromise) };
       return { ok: false, error: "Couldn't save the upload. Reload the page." };
     }
-    await bucket().remove([path]); // never leave a stored file that has no row
+    await removeFiles([path]); // never leave a stored file that has no row
     if (/task_locked/.test(error.message)) return { ok: false, error: TASK_LOCKED, locked: true };
     if (/already_submitted/.test(error.message)) {
       // The older upload trigger (002) is still installed: the teacher needs to run migration 004.
@@ -419,7 +430,7 @@ export async function confirmUpload(input: {
     size_bytes: storedSize,
     ...(replacing ? { edited: true } : {}),
   });
-  return { ok: true, upload: toUploadedFile(saved, (await linkPromise)[path] ?? null) };
+  return { ok: true, upload: toUploadedFile(saved, await linkPromise) };
 }
 
 /** Removes one of the student's own task files: the lookup checks ownership and the release in the same query. */
@@ -452,7 +463,7 @@ export async function removeUpload(uploadId: string): Promise<Result> {
   const { error } = await timed("upload:delete", () => db().from("uploads").delete().eq("id", upload.id));
   if (error) return { ok: false, error: "Couldn't remove the file. Try again." };
   after(async () => {
-    const { error: storageError } = await bucket().remove([upload.storage_path]);
+    const { error: storageError } = await removeFiles([upload.storage_path]);
     if (storageError) console.error("removeUpload: storage delete failed", upload.storage_path, storageError.message);
   });
 

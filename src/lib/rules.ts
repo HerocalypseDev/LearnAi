@@ -67,6 +67,16 @@ export function fileExtension(name: string): string {
 }
 
 /** Returns a child-friendly error, or null if the file is allowed. */
+/**
+ * Pictures get a small JPEG preview, made by the browser at upload, so lists don't download full-size photos.
+ * Pictures smaller than THUMBNAIL_MIN_BYTES are shown as they are. The original is still what Preview opens.
+ */
+export const THUMBNAIL_MAX_PX = 480;
+export const THUMBNAIL_MIN_BYTES = 150 * 1024;
+export function canThumbnail(fileName: string): boolean {
+  return /\.(png|jpe?g|webp|gif|bmp)$/i.test(fileName);
+}
+
 export function checkUpload(name: string, sizeBytes: number, filesAlready: number): string | null {
   if (filesAlready >= MAX_FILES) return `You can attach up to ${MAX_FILES} files.`;
   if (BLOCKED_EXTENSIONS.includes(fileExtension(name))) return `"${name}" is a program file, which isn't allowed.`;

@@ -11,10 +11,10 @@ import { visibleQuestionPoints } from "@/lib/marking";
 import { timed } from "@/lib/perf";
 import { DEFAULT_PENALTY, PARTS } from "@/lib/rules";
 import { requireUserWith } from "@/lib/session";
-import { signedLinks } from "@/lib/storage";
+import { signedPreviewLinks } from "@/lib/storage";
 import { loadStudentHomework } from "@/lib/student-data";
 import { formatDateTime } from "@/lib/time";
-import type { Answer, Settings, StudentQuestion, Upload } from "@/lib/types";
+import type { Answer, PreviewLinks, Settings, StudentQuestion, Upload } from "@/lib/types";
 import { Quiz, type SavedAnswer } from "./quiz";
 import { SubmitPanel } from "./submit-panel";
 import { HandedInNote, TaskSection } from "./task-section";
@@ -220,11 +220,11 @@ export default async function HomeworkPage({ params }: PageProps<"/homework/[id]
 }
 
 /** Signed links by upload id (never the storage paths), for the browser. */
-async function linksById(uploads: Pick<Upload, "id" | "storage_path">[]): Promise<Record<string, string>> {
+async function linksById(uploads: Pick<Upload, "id" | "storage_path" | "file_name">[]): Promise<Record<string, PreviewLinks>> {
   if (uploads.length === 0) return {};
-  // signedLinks reports its own errors; this also keeps a thrown network error from breaking the page.
-  const byPath = await signedLinks(uploads.map((u) => u.storage_path)).catch(() => ({}) as Record<string, string>);
-  const out: Record<string, string> = {};
+  // signedPreviewLinks reports its own errors; this also keeps a thrown network error from breaking the page.
+  const byPath = await signedPreviewLinks(uploads).catch(() => ({}) as Record<string, PreviewLinks>);
+  const out: Record<string, PreviewLinks> = {};
   for (const u of uploads) if (byPath[u.storage_path]) out[u.id] = byPath[u.storage_path];
   return out;
 }

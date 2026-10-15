@@ -109,3 +109,11 @@ export interface Attendance {
   present: boolean;
   note: string | null;
 }
+
+/** Signed links (1 hour) for one task file. */
+export interface PreviewLinks {
+  /** The file itself (Preview / Download / Open). */
+  link: string;
+  /** A picture's small preview, or null when it has none: show the original then. */
+  thumb: string | null;
+}

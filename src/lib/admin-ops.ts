@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { db } from "./db";
 import { loadMarking } from "./marking";
 import { attendanceDateProblem, checkQuestionBudget, clampPoints, computeGrade, gradeFingerprint, normalizeMcq, PARTS, passwordProblem, quizScore } from "./rules";
-import { bucket } from "./storage";
+import { removeFiles } from "./storage";
 import { fromLagosInputs, toLagosInputs } from "./time";
 import type { Grade, Homework, QuizQuestion, User } from "./types";
 
@@ -161,7 +161,7 @@ export async function deleteHomework(id: unknown): Promise<Homework> {
   if (error) throw new OpError(error.message, 500);
   const paths = (files ?? []).map((f) => f.storage_path);
   if (paths.length) {
-    const { error: storageError } = await bucket().remove(paths);
+    const { error: storageError } = await removeFiles(paths);
     if (storageError) console.error("deleteHomework: files left in storage", homework.id, storageError.message);
   }
   return homework;

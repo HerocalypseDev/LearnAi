@@ -3,8 +3,9 @@
 import { Suspense, use, useRef, useState, type ReactNode } from "react";
 import { confirmUpload, removeUpload, requestUpload as serverRequestUpload, type UploadedFile } from "@/app/actions/student";
 import { ProgressBar, Spinner } from "@/components/spinner";
-import { checkUpload, MAX_FILES } from "@/lib/rules";
+import { checkUpload, MAX_FILES, THUMBNAIL_MAX_PX } from "@/lib/rules";
 import { isWritingFileName } from "@/lib/task-text";
+import type { PreviewLinks } from "@/lib/types";
 import { TaskEditor } from "./text-editor";
 
 export interface UploadView {
@@ -13,19 +14,49 @@ export interface UploadView {
   file_type: string | null;
   size_bytes: number;
   /**
-   * Signed link (1 hour) when the server sent it with the file (a fresh upload). Left out for the files the page
+   * Signed links (1 hour) when the server sent them with the file (a fresh upload). Left out for the files the page
    * loaded with: theirs arrive in the `links` promise, which streams in after the page.
    */
-  link?: string | null;
+  links?: PreviewLinks | null;
 }
 
 /** Signed links by upload id, still being signed on the server when the page first renders. */
-export type UploadLinks = Promise<Record<string, string>>;
+export type UploadLinks = Promise<Record<string, PreviewLinks>>;
 
-/** Hands a file's link to `children` once known; suspends on the page's link promise until then. */
-function WithLink({ upload, links, children }: { upload: UploadView; links: UploadLinks; children: (link: string | null) => ReactNode }) {
-  const link = upload.link !== undefined ? upload.link : (use(links)[upload.id] ?? null);
-  return children(link);
+/** Hands a file's links to `children` once known; suspends on the page's link promise until then. */
+function WithLinks({
+  upload,
+  links,
+  children,
+}: {
+  upload: UploadView;
+  links: UploadLinks;
+  children: (links: PreviewLinks | null) => ReactNode;
+}) {
+  return children(upload.links !== undefined ? upload.links : (use(links)[upload.id] ?? null));
+}
+
+/**
+ * A small JPEG of a picture (longest side THUMBNAIL_MAX_PX), so the file list doesn't download the full photo.
+ * Null when the browser can't read the picture; the list then shows the original.
+ */
+async function makeThumbnail(file: File): Promise<Blob | null> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, THUMBNAIL_MAX_PX / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "#fff"; // transparent PNGs get a white background in the JPEG
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.75));
+  } catch {
+    return null;
+  }
 }
 
 interface InProgress {
@@ -43,7 +74,7 @@ const isImage = (u: UploadView) => /^image\//.test(u.file_type ?? "") || /\.(png
 const isPdf = (u: UploadView) => u.file_type === "application/pdf" || /\.pdf$/i.test(u.file_name);
 
 /** PUT the file to Supabase's signed upload URL, reporting progress. */
-function sendFile(url: string, file: File, onProgress: (percent: number) => void): Promise<void> {
+function sendFile(url: string, file: Blob, onProgress: (percent: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
@@ -118,6 +149,11 @@ export function Uploads({
         await sendFile(start.signedUrl, file, (percent) =>
           setProgress((p) => p.map((x) => (x.key === key ? { ...x, percent } : x))),
         );
+        // Best effort: without a preview the list just shows the original picture.
+        if (start.thumbUrl) {
+          const thumb = await makeThumbnail(file);
+          if (thumb) await sendFile(start.thumbUrl, thumb, () => {}).catch(() => {});
+        }
         const done = await confirmUpload({ homeworkId, path: start.path, fileName: file.name, fileType: file.type });
         if (!done.ok) {
           if (done.locked) lockedNow = true;
@@ -148,7 +184,7 @@ export function Uploads({
   }
 
   /** Open a written piece in the editor with its current text; saving replaces that same file. */
-  async function handleEdit(upload: UploadView, link: string | null) {
+  async function handleEdit(upload: UploadView, link: string | null | undefined) {
     if (!link) return setErrors([`Couldn't open ${upload.file_name}. Reload the page and try again.`]);
     setOpening(upload.id);
     try {
@@ -185,14 +221,14 @@ export function Uploads({
       <ul aria-busy={refreshing} className={`space-y-2 transition-opacity ${refreshing ? "opacity-60" : ""}`}>
         {uploads.map((u) => (
           <li key={u.id} className="flex animate-pop items-center gap-3 rounded-xl border border-slate-200 bg-white p-2 transition hover:shadow-md">
-            <Suspense fallback={<FileDetails upload={u} link={undefined} />}>
-              <WithLink upload={u} links={links}>
-                {(link) => (
-                  <FileDetails upload={u} link={link}>
+            <Suspense fallback={<FileDetails upload={u} links={undefined} />}>
+              <WithLinks upload={u} links={links}>
+                {(fileLinks) => (
+                  <FileDetails upload={u} links={fileLinks}>
                     {!locked && isWritingFileName(u.file_name) && (
                       <button
                         type="button"
-                        onClick={() => void handleEdit(u, link)}
+                        onClick={() => void handleEdit(u, fileLinks?.link)}
                         disabled={opening !== null || busy}
                         className="text-xs text-indigo-600 hover:underline disabled:opacity-50"
                       >
@@ -207,7 +243,7 @@ export function Uploads({
                     )}
                   </FileDetails>
                 )}
-              </WithLink>
+              </WithLinks>
             </Suspense>
             {!locked && (
               <button
@@ -299,17 +335,18 @@ export function Uploads({
   );
 }
 
-/** Thumbnail, name, size and Preview / Download link of one file. `link` undefined: still being signed. */
-function FileDetails({ upload: u, link, children }: { upload: UploadView; link: string | null | undefined; children?: ReactNode }) {
+/** Thumbnail, name, size and Preview / Download link of one file. `links` undefined: still being signed. */
+function FileDetails({ upload: u, links, children }: { upload: UploadView; links: PreviewLinks | null | undefined; children?: ReactNode }) {
+  const link = links?.link;
   return (
     <>
       {isImage(u) && link ? (
         // eslint-disable-next-line @next/next/no-img-element -- short-lived signed link, not worth image optimisation
-        <img src={link} alt="" loading="lazy" decoding="async" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
+        <img src={links.thumb ?? link} alt="" loading="lazy" decoding="async" className="h-14 w-14 shrink-0 rounded-lg object-cover" />
       ) : (
         <div
           className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold uppercase text-slate-500 ${
-            link === undefined && isImage(u) ? "animate-pulse" : ""
+            links === undefined && isImage(u) ? "animate-pulse" : ""
           }`}
         >
           {u.file_name.split(".").pop()?.slice(0, 4)}
