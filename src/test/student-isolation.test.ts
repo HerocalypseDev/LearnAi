@@ -49,3 +49,27 @@ describe("student-facing code", () => {
     expect(src).not.toMatch(/return\s*{\s*ok:\s*true,\s*(question|correct|auto_points)/);
   });
 });
+
+describe("server actions check who is calling", () => {
+  // Every exported action is a public endpoint: the proxy's cookie check is only optimistic, so each one must
+  // call requireUser with the right role itself (login/logout excepted).
+  const actions: [file: string, role: "admin" | "student"][] = [
+    ["app/actions/student.ts", "student"],
+    ["app/actions/homework-admin.ts", "admin"],
+    ["app/actions/marking.ts", "admin"],
+    ["app/actions/admin.ts", "admin"],
+    ["app/actions/attendance.ts", "admin"],
+  ];
+  for (const [file, role] of actions) {
+    it(`${file}: every exported action starts with requireUser("${role}")`, () => {
+      const src = strip(readFileSync(join(root, file), "utf8"));
+      const bodies = src.split(/export async function /).slice(1);
+      expect(bodies.length).toBeGreaterThan(0);
+      for (const body of bodies) {
+        const name = body.slice(0, body.indexOf("("));
+        const firstStatement = body.slice(body.indexOf("{", body.indexOf(")")));
+        expect(firstStatement.slice(0, 200), name).toContain(`requireUser("${role}")`);
+      }
+    });
+  }
+});
